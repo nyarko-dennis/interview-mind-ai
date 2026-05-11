@@ -1,0 +1,35 @@
+{
+  "name": "@interview-mind/web",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "type-check": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@interview-mind/shared": "workspace:*",
+    "@monaco-editor/react": "^4.6.0",
+    "framer-motion": "^11.0.0",
+    "jose": "^5.0.0",
+    "next": "^15.0.0",
+    "next-auth": "^5.0.0-beta.25",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "socket.io-client": "^4.7.0",
+    "zod": "^3.23.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0"
+  }
+}

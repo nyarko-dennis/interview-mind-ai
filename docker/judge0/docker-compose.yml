@@ -1,0 +1,63 @@
+version: '3.9'
+
+# Judge0 local execution stack — runs isolated from the app's own PostgreSQL.
+# App DB:    localhost:5432
+# Judge0 DB: localhost:5433  (remapped to avoid conflict)
+#
+# Setup: copy .env.judge0.example to .env.judge0, set passwords, then run:
+#   docker compose --env-file .env.judge0 up -d
+
+services:
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    ports:
+      - '2358:2358'
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    environment:
+      - REDIS_HOST=judge0-redis
+      - POSTGRES_HOST=judge0-db
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=${JUDGE0_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${JUDGE0_POSTGRES_PASSWORD}
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    restart: unless-stopped
+
+  judge0-workers:
+    image: judge0/judge0:1.13.1
+    command: ['./scripts/workers']
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    environment:
+      - REDIS_HOST=judge0-redis
+      - POSTGRES_HOST=judge0-db
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=${JUDGE0_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${JUDGE0_POSTGRES_PASSWORD}
+    privileged: true
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    restart: unless-stopped
+
+  judge0-db:
+    image: postgres:16-alpine
+    ports:
+      - '5433:5432'   # Remapped — app DB stays on 5432
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: ${JUDGE0_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${JUDGE0_POSTGRES_PASSWORD}
+    volumes:
+      - judge0-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  judge0-redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${JUDGE0_REDIS_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  judge0-db-data:
