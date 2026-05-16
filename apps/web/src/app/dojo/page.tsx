@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { PATTERN_LABELS, STATUS_LABELS, STATUS_COLORS } from '@/lib/dojo-constants';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 type WeeklySummary = {
   currentWeekXp: number;

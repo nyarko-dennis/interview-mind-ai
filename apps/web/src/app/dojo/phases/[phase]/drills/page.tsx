@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { DrillCard } from '@/components/dojo/DrillCard';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 const VALID_PHASES = ['CLARIFICATION', 'APPROACH', 'IMPLEMENTATION'] as const;
 

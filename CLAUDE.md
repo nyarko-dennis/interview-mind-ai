@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # All apps together (from root)
-pnpm dev          # starts web (port 3000) and api (port 4000) in parallel via Turborepo
+pnpm dev          # starts web (port 3000) and api (port 5000) in parallel via Turborepo
 pnpm build        # builds shared → api → web in dependency order
 pnpm lint
 pnpm type-check
@@ -77,7 +77,7 @@ Server emits (event names defined in `packages/shared/src/schemas/ws-events.ts`)
 Front-end socket wiring lives in `apps/web/src/lib/socket.ts`; the Zustand store (`apps/web/src/lib/store.ts`) consumes the events and drives UI.
 
 ### REST API
-All routes under `http://localhost:4000`. JWT Bearer required unless noted.
+All routes under `http://localhost:5000`. JWT Bearer required unless noted.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -116,7 +116,7 @@ Drizzle ORM on PostgreSQL. Schema in `apps/api/src/db/schema.ts`. Tables: `users
 | api | `JUDGE0_BASE_URL` | Judge0 base (default `http://localhost:2358`) |
 | api | `AUTH_SECRET` | Must match web `AUTH_SECRET` |
 | api | `FRONTEND_URL` | CORS origin for WS gateway (default `http://localhost:3000`) |
-| api | `PORT` | API port (default 4000) |
+| api | `PORT` | API port (default 5000) |
 | api | `MAX_SESSIONS_PER_DAY` | Local dev cost cap |
 | api | `DEBRIEF_CACHE` | Cache debrief responses locally |
 | web | `NEXT_PUBLIC_API_URL` | NestJS base URL |

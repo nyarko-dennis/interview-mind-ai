@@ -12,7 +12,7 @@ export function getSocket(): Socket {
 export function connectSocket(sessionId: string, apiToken: string): Socket {
   socket?.disconnect();
 
-  socket = io(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/session`, {
+  socket = io(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000'}/session`, {
     auth: { token: apiToken },
     autoConnect: false,
   });

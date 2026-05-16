@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { SessionArena } from '@/components/session/SessionArena';
 import type { SessionPhase } from '@interview-mind/shared';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 interface SessionData {
   id: string;
