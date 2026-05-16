@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { useOnboardingStore, scoreToTier } from '@/lib/onboarding-store';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 export default function FirstSessionPage() {
   const router = useRouter();

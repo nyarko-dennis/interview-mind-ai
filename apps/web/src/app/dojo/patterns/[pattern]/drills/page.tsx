@@ -5,7 +5,7 @@ import { DrillCard } from '@/components/dojo/DrillCard';
 import { PATTERN_LABELS, ALL_PATTERNS, xpToNextLevel } from '@/lib/dojo-constants';
 import type { AlgorithmicPattern } from '@interview-mind/shared';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 type Drill = { id: string; type: string; pattern: string | null; prompt: string; difficulty: string };
 type ProgressRow = { key: string; category: string; status: string; level: number; xp: number; attemptsCount: number };

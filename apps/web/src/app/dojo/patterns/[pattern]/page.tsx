@@ -11,7 +11,7 @@ import {
 } from '@/lib/dojo-constants';
 import type { AlgorithmicPattern } from '@interview-mind/shared';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 type Tip = { id: string; title: string; body: string };
 type ProgressRow = {

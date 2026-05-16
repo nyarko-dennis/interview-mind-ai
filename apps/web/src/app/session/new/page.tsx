@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { AlgorithmicPattern, DifficultyLevel, InterviewerMode } from '@interview-mind/shared';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 // ---- types ----------------------------------------------------------------
 

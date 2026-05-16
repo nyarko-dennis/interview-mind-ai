@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { PATTERN_LABELS } from '@/lib/dojo-constants';
 import type { AlgorithmicPattern, DifficultyLevel } from '@interview-mind/shared';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 type Problem = { id: string; title: string; difficulty: string; pattern: string };
 type InterviewerMode = 'GUIDED' | 'STRICT';

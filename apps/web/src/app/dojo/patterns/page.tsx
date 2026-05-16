@@ -9,7 +9,7 @@ import {
   xpToNextLevel,
 } from '@/lib/dojo-constants';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 type ProgressRow = {
   key: string;

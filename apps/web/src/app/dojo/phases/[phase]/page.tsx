@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { TipBlock } from '@/components/dojo/TipBlock';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 const VALID_PHASES = ['CLARIFICATION', 'APPROACH', 'IMPLEMENTATION'] as const;
 
