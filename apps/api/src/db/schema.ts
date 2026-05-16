@@ -32,6 +32,7 @@ export const problems = pgTable('problems', {
   difficulty: text('difficulty').notNull(),
   statement: text('statement').notNull(),
   hintCeiling: integer('hint_ceiling').notNull().default(2),
+  optimalTimeComplexity: text('optimal_time_complexity'),
   functionStub: text('function_stub'),
   testRunner: text('test_runner'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -61,6 +62,7 @@ export const sessions = pgTable('sessions', {
   maxHintLevel: integer('max_hint_level').notNull().default(0),
   clarificationAttempts: integer('clarification_attempts').notNull().default(0),
   clarificationCoverage: jsonb('clarification_coverage').notNull().default('{"INPUT":0,"OUTPUT":0,"CONSTRAINTS":0,"EDGE_CASES":0}'),
+  approachStep: text('approach_step'),
   startedAt: timestamp('started_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
 });

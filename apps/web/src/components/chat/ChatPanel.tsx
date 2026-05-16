@@ -15,7 +15,7 @@ interface Props {
 const CHECKIN_DELAY_MS = 3 * 60 * 1000;
 
 export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) {
-  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, reviewFeedback, clarificationCoverage } =
+  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, reviewFeedback, clarificationCoverage, approachStep } =
     useSessionStore();
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -68,6 +68,33 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
         <p className="text-xs leading-relaxed text-muted">{problemStatement}</p>
       </div>
 
+      {/* Approach step indicator */}
+      {phase === 'APPROACH' && (
+        <div className="shrink-0 border-b border-border px-4 py-3">
+          <p className="mb-2 text-[9px] tracking-widest text-muted">APPROACH</p>
+          <div className="flex gap-3">
+            {([
+              { step: 'NAIVE',   label: 'Brute Force' },
+              { step: 'IMPROVE', label: 'Improved' },
+              { step: 'OPTIMAL', label: 'Optimal' },
+            ] as const).map(({ step, label }, idx) => {
+              const stepOrder = { NAIVE: 0, IMPROVE: 1, OPTIMAL: 2 };
+              const currentOrder = approachStep ? stepOrder[approachStep] : 0;
+              const done = stepOrder[step] < currentOrder;
+              const active = step === approachStep;
+              return (
+                <div key={step} className="flex items-center gap-1.5">
+                  {idx > 0 && <span className="text-[10px] text-muted/40">›</span>}
+                  <span className={`text-[10px] ${done ? 'text-accent' : active ? 'text-white' : 'text-muted/40'}`}>
+                    {done ? '✓ ' : ''}{label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Clarification coverage tracker */}
       {phase === 'CLARIFICATION' && (
         <div className="shrink-0 border-b border-border px-4 py-3">
@@ -101,13 +128,38 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
 
       {/* Transcript */}
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages.length === 0 && (phase === 'CLARIFICATION' || phase === 'APPROACH') && (
+        {messages.length === 0 && phase === 'CLARIFICATION' && (
           <div className="border-l-2 border-accent/30 py-0.5 pl-3">
             <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
             <p className="text-sm leading-relaxed text-white/50">
-              {phase === 'CLARIFICATION'
-                ? "Take a moment to read the problem. When you're ready, ask a clarifying question."
-                : 'Outline your approach in the editor on the right. Click CONFIRM APPROACH → when ready.'}
+              Take a moment to read the problem. When you're ready, ask a clarifying question.
+            </p>
+          </div>
+        )}
+
+        {phase === 'APPROACH' && approachStep === 'NAIVE' && (
+          <div className="border-l-2 border-accent/30 py-0.5 pl-3">
+            <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
+            <p className="text-sm leading-relaxed text-white/50">
+              Start with the brute-force solution. Describe the algorithm, state its time complexity, and explain why it is suboptimal.
+            </p>
+          </div>
+        )}
+
+        {phase === 'APPROACH' && approachStep === 'IMPROVE' && (
+          <div className="border-l-2 border-accent/30 py-0.5 pl-3">
+            <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
+            <p className="text-sm leading-relaxed text-white/50">
+              Good. Now describe how you would improve it — what changes and how does that affect time and space complexity?
+            </p>
+          </div>
+        )}
+
+        {phase === 'APPROACH' && approachStep === 'OPTIMAL' && (
+          <div className="border-l-2 border-accent/30 py-0.5 pl-3">
+            <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
+            <p className="text-sm leading-relaxed text-white/50">
+              Is there a further optimal solution, or is your improvement already optimal? Explain why.
             </p>
           </div>
         )}

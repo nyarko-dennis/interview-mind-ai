@@ -14,6 +14,8 @@ export type SupportedLanguage = 'python' | 'javascript' | 'typescript' | 'java' 
 
 export type ClarificationCategory = 'INPUT' | 'OUTPUT' | 'CONSTRAINTS' | 'EDGE_CASES';
 
+export type ApproachStep = 'NAIVE' | 'IMPROVE' | 'OPTIMAL';
+
 export interface ClarificationCoverage {
   INPUT: number;
   OUTPUT: number;

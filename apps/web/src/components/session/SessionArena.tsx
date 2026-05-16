@@ -11,7 +11,7 @@ import { PhaseIndicator } from '@/components/session/PhaseIndicator';
 import { useSessionStore } from '@/lib/store';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import { WsServerEvents } from '@interview-mind/shared';
-import type { SessionPhase, InterviewerMode, HintLevel, ClarificationResult } from '@interview-mind/shared';
+import type { SessionPhase, InterviewerMode, HintLevel, ClarificationResult, ApproachResult, ApproachStep } from '@interview-mind/shared';
 
 interface Props {
   sessionId: string;
@@ -56,6 +56,7 @@ export function SessionArena({
     setSubmissionError,
     setReviewFeedback,
     setClarificationCoverage,
+    setApproachStep,
     setDebriefData,
     setDebriefError,
     initSession,
@@ -90,6 +91,8 @@ export function SessionArena({
 
     socket.on(WsServerEvents.PHASE_CHANGE, ({ phase }: { phase: SessionPhase }) => {
       setPhase(phase);
+      if (phase === 'APPROACH') setApproachStep('NAIVE');
+      if (phase !== 'APPROACH') setApproachStep(null);
     });
 
     socket.on(WsServerEvents.CLARIFICATION_RESULT, (result: ClarificationResult) => {
@@ -97,8 +100,16 @@ export function SessionArena({
       setClarificationCoverage(result.coverage);
     });
 
-    socket.on(WsServerEvents.APPROACH_RESULT, (result: { accepted: boolean; probe?: string }) => {
+    socket.on(WsServerEvents.APPROACH_RESULT, (result: ApproachResult) => {
       if (result.probe) addMessage({ role: 'ai', content: result.probe });
+      if (result.accepted) {
+        const next: Record<ApproachStep, ApproachStep | null> = {
+          NAIVE: 'IMPROVE',
+          IMPROVE: 'OPTIMAL',
+          OPTIMAL: null,
+        };
+        setApproachStep(next[result.approachStep]);
+      }
     });
 
     socket.on(WsServerEvents.AI_STREAM_CHUNK, ({ chunk }: { chunk: string }) => {

@@ -88,7 +88,7 @@ export class SessionGateway implements OnGatewayConnection, OnGatewayDisconnect 
     );
     this.server.to(data.sessionId).emit(WsServerEvents.APPROACH_RESULT, result);
 
-    if (result.accepted) {
+    if (result.advanceToImplementation) {
       this.server
         .to(data.sessionId)
         .emit(WsServerEvents.PHASE_CHANGE, { phase: 'IMPLEMENTATION' });

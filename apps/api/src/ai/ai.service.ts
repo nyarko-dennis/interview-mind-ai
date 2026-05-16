@@ -51,9 +51,9 @@ Keep feedback to one sentence.`,
     return JSON.parse(extractJson(text));
   }
 
-  async probeApproach(
+  async evaluateNaiveApproach(
     problemStatement: string,
-    approachDescription: string,
+    description: string,
   ): Promise<{ accepted: boolean; probe?: string }> {
     const response = await this.client.messages.create({
       model: HAIKU,
@@ -61,21 +61,87 @@ Keep feedback to one sentence.`,
       messages: [
         {
           role: 'user',
-          content: `You are a senior engineer interviewer evaluating a candidate's approach description.
+          content: `You are a senior engineer interviewer. The candidate is describing their brute-force solution.
 
 Problem: ${problemStatement}
-Candidate's approach: "${approachDescription}"
+Candidate's brute-force description: "${description}"
 
-Evaluate in this order:
-1. Is the algorithm fundamentally sound for this problem?
-2. Did the candidate state time AND space complexity (even approximately)?
+Accept if ALL of:
+1. The algorithm is a valid (even if slow) solution to the problem
+2. They stated the time complexity (e.g. O(n²), O(2^n)) — space complexity optional here
+3. They named or implied WHY it is suboptimal (e.g. "nested loops", "redundant work", "exponential")
 
-Rules:
-- If the approach is unsound: { "accepted": false, "probe": "<one question about the correctness issue>" }
-- If the approach is sound but complexity is completely absent: { "accepted": false, "probe": "Your approach looks solid. What's the time and space complexity?" }
-- If the approach is sound AND complexity was mentioned (even briefly): { "accepted": true }
+If not accepted, give one focused probe question addressing the first missing element.
 
-Respond with JSON only.`,
+Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return JSON.parse(extractJson(text));
+  }
+
+  async evaluateImprovedApproach(
+    problemStatement: string,
+    description: string,
+  ): Promise<{ accepted: boolean; probe?: string }> {
+    const response = await this.client.messages.create({
+      model: HAIKU,
+      max_tokens: 256,
+      messages: [
+        {
+          role: 'user',
+          content: `You are a senior engineer interviewer. The candidate is describing an improvement over their brute-force solution.
+
+Problem: ${problemStatement}
+Candidate's improved approach: "${description}"
+
+Accept if ALL of:
+1. The algorithm is a genuine improvement (better time or space complexity than naive)
+2. They named what changed (e.g. data structure, technique, pruning strategy)
+3. They stated both the improved time AND space complexity
+
+If not accepted, give one focused probe question addressing the first missing element.
+
+Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return JSON.parse(extractJson(text));
+  }
+
+  async evaluateOptimalApproach(
+    problemStatement: string,
+    optimalTimeComplexity: string | null,
+    description: string,
+  ): Promise<{ accepted: boolean; probe?: string }> {
+    const complexityHint = optimalTimeComplexity
+      ? `The known optimal time complexity for this problem is ${optimalTimeComplexity}.`
+      : 'No known optimal complexity is provided — use your judgement.';
+
+    const response = await this.client.messages.create({
+      model: HAIKU,
+      max_tokens: 256,
+      messages: [
+        {
+          role: 'user',
+          content: `You are a senior engineer interviewer. The candidate is describing what they believe is the optimal solution, or arguing that their improved solution is already optimal.
+
+Problem: ${problemStatement}
+${complexityHint}
+
+Candidate's response: "${description}"
+
+Accept if:
+- Their solution matches or reaches the known optimal complexity, AND they correctly explain why it cannot be improved further, OR
+- Their improved solution IS already optimal and they correctly identify it as such with justification
+
+If not accepted, give one focused probe question — either challenging the optimality claim or asking them to justify why further improvement is impossible.
+
+Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
         },
       ],
     });

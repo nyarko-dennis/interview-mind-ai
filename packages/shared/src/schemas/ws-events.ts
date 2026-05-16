@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ClarificationCategory, ClarificationCoverage } from '../types/session';
+import type { ClarificationCategory, ClarificationCoverage, ApproachStep } from '../types/session';
 
 // Client → Server
 export const JoinSessionPayload = z.object({ sessionId: z.string().uuid() });
@@ -48,6 +48,8 @@ export type ClarificationResult = {
 export type ApproachResult = {
   accepted: boolean;
   probe?: string;
+  approachStep: ApproachStep;
+  advanceToImplementation: boolean;
 };
 
 export type HintDelivery = {

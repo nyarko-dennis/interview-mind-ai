@@ -13,6 +13,7 @@ import type {
   SupportedLanguage,
   HintLevel,
   ClarificationCoverage,
+  ApproachStep,
 } from '@interview-mind/shared';
 
 @Injectable()
@@ -197,14 +198,35 @@ export class SessionService {
     const session = await this.getById(sessionId);
     this.assertPhase(session.phase as SessionPhase, 'APPROACH');
 
+    const step: ApproachStep = (session.approachStep as ApproachStep) ?? 'NAIVE';
     const problem = await this.problems.findById(session.problemId);
-    const result = await this.ai.probeApproach(problem.statement, description);
 
+    if (step === 'NAIVE') {
+      const result = await this.ai.evaluateNaiveApproach(problem.statement, description);
+      if (result.accepted) {
+        await this.db.update(sessions).set({ approachStep: 'IMPROVE' }).where(eq(sessions.id, sessionId));
+      }
+      return { ...result, approachStep: 'NAIVE' as ApproachStep, advanceToImplementation: false };
+    }
+
+    if (step === 'IMPROVE') {
+      const result = await this.ai.evaluateImprovedApproach(problem.statement, description);
+      if (result.accepted) {
+        await this.db.update(sessions).set({ approachStep: 'OPTIMAL' }).where(eq(sessions.id, sessionId));
+      }
+      return { ...result, approachStep: 'IMPROVE' as ApproachStep, advanceToImplementation: false };
+    }
+
+    // OPTIMAL step
+    const result = await this.ai.evaluateOptimalApproach(
+      problem.statement,
+      problem.optimalTimeComplexity ?? null,
+      description,
+    );
     if (result.accepted) {
       await this.transitionPhase(sessionId, 'IMPLEMENTATION');
     }
-
-    return result;
+    return { ...result, approachStep: 'OPTIMAL' as ApproachStep, advanceToImplementation: result.accepted };
   }
 
   async requestHint(sessionId: string) {
@@ -357,6 +379,8 @@ export class SessionService {
 
   private async transitionPhase(sessionId: string, phase: SessionPhase) {
     const updates: Partial<typeof sessions.$inferInsert> = { phase };
+    if (phase === 'APPROACH') updates.approachStep = 'NAIVE';
+    if (phase === 'IMPLEMENTATION') updates.approachStep = null;
     if (phase === 'DEBRIEF') updates.completedAt = new Date();
 
     await this.db.update(sessions).set(updates).where(eq(sessions.id, sessionId));

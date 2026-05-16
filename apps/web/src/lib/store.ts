@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SessionPhase, InterviewerMode, SupportedLanguage, HintLevel, ClarificationCoverage } from '@interview-mind/shared';
+import type { SessionPhase, InterviewerMode, SupportedLanguage, HintLevel, ClarificationCoverage, ApproachStep } from '@interview-mind/shared';
 
 export interface ChatMessage {
   role: 'ai' | 'user';
@@ -53,6 +53,9 @@ interface SessionStore {
   // Clarification coverage tracker
   clarificationCoverage: ClarificationCoverage;
 
+  // Approach sub-phase
+  approachStep: ApproachStep | null;
+
   // Per-phase elapsed time tracking
   phaseStartedAt: number; // Date.now() snapshot when current phase began
 
@@ -78,6 +81,7 @@ interface SessionStore {
   setRunOutput: (output: RunOutput) => void;
   setSubmissionError: (msg: string | null) => void;
   setClarificationCoverage: (coverage: ClarificationCoverage) => void;
+  setApproachStep: (step: ApproachStep | null) => void;
   setDebriefData: (data: DebriefScore) => void;
   setDebriefError: (msg: string) => void;
 }
@@ -99,6 +103,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   runOutput: null,
   submissionError: null,
   clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
+  approachStep: null,
   phaseStartedAt: Date.now(),
   reviewFeedback: null,
   debriefData: null,
@@ -121,6 +126,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       runOutput: null,
       submissionError: null,
       clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
+      approachStep: null,
       phaseStartedAt: Date.now(),
       reviewFeedback: null,
       debriefData: null,
@@ -151,6 +157,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setRunOutput: (runOutput) => set({ runOutput }),
   setSubmissionError: (submissionError) => set({ submissionError }),
   setClarificationCoverage: (clarificationCoverage) => set({ clarificationCoverage }),
+  setApproachStep: (approachStep) => set({ approachStep }),
   setDebriefData: (debriefData) => set({ debriefData }),
   setDebriefError: (debriefError) => set({ debriefError }),
 }));
