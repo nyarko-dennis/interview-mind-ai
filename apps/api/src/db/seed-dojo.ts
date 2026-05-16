@@ -1397,51 +1397,136 @@ Since you won't get confirmations, you must state your assumptions clearly. Writ
     difficulty: 'HARD',
   },
 
-  // ── APPROACH DRILLS (4) ───────────────────────────────────────────────────
+  // ── APPROACH_NAIVE DRILLS (4) ─────────────────────────────────────────────
 
   {
-    type: 'APPROACH',
+    type: 'APPROACH_NAIVE',
     pattern: null,
-    prompt: `Problem: Given an array of integers, find two numbers that sum to a target. Return their indices.
+    prompt: `Problem: Given an array of integers and a target, return the indices of the two numbers that add up to the target. Exactly one solution is guaranteed; you may not use the same element twice.
 
-Constraints confirmed: array can contain duplicates, negative numbers, exactly one solution guaranteed, n ≤ 10⁵.
+Constraints confirmed: n ≤ 10⁵, values can be negative or duplicated.
 
-Write your full approach as if describing it to an interviewer before coding. Include: (1) your brute force and why it's too slow, (2) your optimized approach and the key insight, (3) the data structures you'll use and why, (4) time and space complexity, (5) any edge cases you'll handle.`,
+Describe the brute-force solution to this problem. State its time and space complexity, and explain specifically why it is too slow for the given constraints.`,
     correctAnswer: null,
     difficulty: 'EASY',
   },
   {
-    type: 'APPROACH',
+    type: 'APPROACH_NAIVE',
     pattern: null,
-    prompt: `Problem: Given a string containing just '(', ')', '{', '}', '[', ']', determine if the input string is valid. A string is valid if: open brackets are closed by the same type of bracket, open brackets are closed in the correct order, and every close bracket has a corresponding open bracket.
+    prompt: `Problem: Given a string s, find the length of the longest substring that contains no repeating characters.
 
-Example: "()[]{}" → true, "([)]" → false, "{[]}" → true
+Example: s="abcabcbb" → 3 ("abc"), s="bbbbb" → 1, s="pwwkew" → 3 ("wke")
 
-Write your full approach before coding. Include brute force (if applicable), your optimized solution, data structures, complexity, and edge cases you anticipate.`,
+Constraints confirmed: s can be up to length 10⁵, contains any printable ASCII characters.
+
+Describe the brute-force solution. State its time complexity and explain the specific inefficiency — what redundant work does it do that a better approach could eliminate?`,
     correctAnswer: null,
     difficulty: 'EASY',
   },
   {
-    type: 'APPROACH',
+    type: 'APPROACH_NAIVE',
     pattern: null,
-    prompt: `Problem: Given a list of non-overlapping intervals sorted by start time, insert a new interval and merge any overlapping intervals. Return the result.
+    prompt: `Problem: Given an integer array nums, return an array output where output[i] is the product of all elements of nums except nums[i]. You must solve it without using division and in O(n) time.
 
-Constraints confirmed: existing intervals are sorted and non-overlapping, new interval may overlap multiple existing ones, input can be empty.
+Example: nums=[1,2,3,4] → [24,12,8,6]
 
-Write your approach for an interviewer. Start with brute force, optimize, state your invariants clearly, give complexity, and call out the tricky cases (e.g., new interval overlaps none, all, or some existing intervals).`,
+Ignore the O(n) constraint for now. Describe the naive solution a junior engineer might write first. State its time and space complexity and identify exactly what makes it too slow.`,
     correctAnswer: null,
     difficulty: 'MEDIUM',
   },
   {
-    type: 'APPROACH',
+    type: 'APPROACH_NAIVE',
     pattern: null,
-    prompt: `Problem: Given a string s containing only digits, return all possible valid IP addresses that can be formed by inserting exactly three dots into s. A valid IP address has four octets, each between 0 and 255, with no leading zeros.
+    prompt: `Problem: Given n courses (labeled 0 to n-1) and a list of prerequisite pairs [a, b] meaning "you must take b before a", determine if it is possible to finish all courses (i.e., detect if there is a cycle in the dependency graph).
 
-Example: s="25525511135" → ["255.255.11.135","255.255.111.35"]
+Example: n=2, prerequisites=[[1,0]] → true. n=2, prerequisites=[[1,0],[0,1]] → false.
 
-Write your approach. This problem has a constrained search space — explain how you'd enumerate possibilities, what constraints prune the search, and why your approach terminates. Include complexity analysis.`,
+Describe a naive approach that a candidate might reach for first. State its time complexity in terms of V (courses) and E (prerequisites), and explain why it does more work than necessary.`,
     correctAnswer: null,
     difficulty: 'MEDIUM',
+  },
+
+  // ── APPROACH_IMPROVE DRILLS (4) ───────────────────────────────────────────
+
+  {
+    type: 'APPROACH_IMPROVE',
+    pattern: null,
+    prompt: `Problem: Given an array of integers and a target, return the indices of the two numbers that add up to the target.
+
+Brute force: check every pair with two nested loops — O(n²) time, O(1) space. The bottleneck is repeatedly scanning the array for each element's complement.
+
+Describe your improved solution. Name the data structure or technique that eliminates the redundant scanning, explain what changes, and state the new time and space complexity.`,
+    correctAnswer: null,
+    difficulty: 'EASY',
+  },
+  {
+    type: 'APPROACH_IMPROVE',
+    pattern: null,
+    prompt: `Problem: Given a string s, find the length of the longest substring with no repeating characters.
+
+Brute force: generate all O(n²) substrings, check each for uniqueness in O(n) time — total O(n³) time, O(min(n,k)) space. The bottleneck is re-scanning characters we have already processed.
+
+Describe your improved solution. Explain the key insight that lets you avoid revisiting characters, name the technique, and state the new time and space complexity.`,
+    correctAnswer: null,
+    difficulty: 'EASY',
+  },
+  {
+    type: 'APPROACH_IMPROVE',
+    pattern: null,
+    prompt: `Problem: Return an array where each element is the product of all other elements in the input array — no division, O(n) time required.
+
+Brute force: for each index i, multiply all elements except i using a nested loop — O(n²) time, O(1) extra space (ignoring output). The bottleneck is recomputing overlapping products.
+
+Describe your improved approach. Explain what precomputed information you store and how it lets you answer each position in O(1), then state the full time and space complexity.`,
+    correctAnswer: null,
+    difficulty: 'MEDIUM',
+  },
+  {
+    type: 'APPROACH_IMPROVE',
+    pattern: null,
+    prompt: `Problem: Given n courses and prerequisite pairs, detect if a cycle exists in the dependency graph (course schedule problem).
+
+Brute force: for each course, run a fresh DFS to check if it can reach itself — O(V × (V+E)) total, redundantly re-exploring shared subgraphs.
+
+Describe the standard improved approach. Explain what state you track per node to avoid redundant exploration, how a single traversal over the whole graph suffices, and give the improved time and space complexity.`,
+    correctAnswer: null,
+    difficulty: 'MEDIUM',
+  },
+
+  // ── APPROACH_OPTIMAL DRILLS (3) ───────────────────────────────────────────
+
+  {
+    type: 'APPROACH_OPTIMAL',
+    pattern: null,
+    prompt: `Problem: Two Sum — find two indices in an array that sum to a target.
+
+Improved solution: hash map approach — O(n) time, O(n) space. For each element, check if its complement is already in the map; if not, store the element and its index.
+
+Is O(n) the optimal time complexity for this problem? Argue why or why not. If you believe it is optimal, justify it with a lower-bound argument. If you think further improvement is possible, describe it.`,
+    correctAnswer: null,
+    difficulty: 'EASY',
+  },
+  {
+    type: 'APPROACH_OPTIMAL',
+    pattern: null,
+    prompt: `Problem: Longest substring without repeating characters.
+
+Improved solution: sliding window with a hash set — O(n) time, O(min(n,k)) space, where k is the character set size. Each character is added and removed from the window at most once.
+
+Is O(n) the optimal time complexity here? Give a lower-bound argument. Is the O(k) space optimal, or can you do better? Explain your reasoning.`,
+    correctAnswer: null,
+    difficulty: 'MEDIUM',
+  },
+  {
+    type: 'APPROACH_OPTIMAL',
+    pattern: null,
+    prompt: `Problem: Given a sorted array of n distinct integers, find the index of a target value — or return -1 if absent.
+
+The standard solution is binary search: O(log n) time, O(1) space.
+
+Argue whether O(log n) is the optimal time complexity for this problem. Use a lower-bound argument based on information theory or the comparison model. Can we do better than O(log n) in any model of computation?`,
+    correctAnswer: null,
+    difficulty: 'HARD',
   },
 ];
 
@@ -1481,7 +1566,9 @@ async function seedDojo() {
 
   const patternIdCount = DRILLS.filter((d) => d.type === 'PATTERN_ID').length;
   const clarCount = DRILLS.filter((d) => d.type === 'CLARIFICATION').length;
-  const approachCount = DRILLS.filter((d) => d.type === 'APPROACH').length;
+  const naiveCount = DRILLS.filter((d) => d.type === 'APPROACH_NAIVE').length;
+  const improveCount = DRILLS.filter((d) => d.type === 'APPROACH_IMPROVE').length;
+  const optimalCount = DRILLS.filter((d) => d.type === 'APPROACH_OPTIMAL').length;
 
   for (const drill of DRILLS) {
     await db
@@ -1501,9 +1588,11 @@ async function seedDojo() {
 Done.
   Phase tips:   ${PHASE_TIPS.length}
   Pattern tips: ${PATTERN_TIPS.length}
-  PATTERN_ID drills:   ${patternIdCount}
-  CLARIFICATION drills: ${clarCount}
-  APPROACH drills:      ${approachCount}
+  PATTERN_ID drills:      ${patternIdCount}
+  CLARIFICATION drills:   ${clarCount}
+  APPROACH_NAIVE drills:  ${naiveCount}
+  APPROACH_IMPROVE drills:${improveCount}
+  APPROACH_OPTIMAL drills:${optimalCount}
   Total drills: ${DRILLS.length}
   `);
 
