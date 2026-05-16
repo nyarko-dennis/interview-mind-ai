@@ -7,7 +7,7 @@ export type PatternStatus =
   | 'GUIDED_PASSED'
   | 'MASTERED';
 
-export type DrillType = 'PATTERN_ID' | 'CLARIFICATION' | 'APPROACH';
+export type DrillType = 'PATTERN_ID' | 'CLARIFICATION' | 'APPROACH_NAIVE' | 'APPROACH_IMPROVE' | 'APPROACH_OPTIMAL';
 
 export type DrillDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 

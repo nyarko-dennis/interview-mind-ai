@@ -316,16 +316,17 @@ ${params.problemPrompt}
 Candidate's clarifying questions:
 ${params.userQuestions}
 
-Score 0–100 based on:
-- Relevance: do the questions target real ambiguities in this specific problem? (40 pts)
-- Coverage: do they cover constraints, output format, and edge cases? (30 pts)
-- Priority: are the most impactful questions asked first? (15 pts)
-- Precision: are questions specific rather than vague ("any constraints?")? (15 pts)
+Score 0–100 using these weighted categories:
+- Input (30 pts): questions about input format, data types, value ranges, or input structure
+- Output (30 pts): questions about what to return, output format, or expected results
+- Edge Cases (25 pts): questions about boundary conditions, empty/null inputs, duplicates, or special values
+- Constraints (15 pts): questions about time/space complexity requirements or problem-size limits
 
-Deduct points for: asking what can be inferred from examples, asking implementation questions, asking more than 6 questions.
+Award full points in a category if the candidate asked at least 3 substantive, specific questions in it (2 for Constraints).
+Deduct points for vague questions ("any constraints?") or questions answerable from the problem statement.
 
 Respond with JSON: { "score": number, "feedback": string }
-Feedback must be 3–4 sentences, warm coaching voice. Highlight one specific strength and one concrete improvement.`,
+Feedback must be 3–4 sentences, warm coaching voice. Name which categories were well covered and which need more depth.`,
         },
       ],
     });
@@ -334,9 +335,9 @@ Feedback must be 3–4 sentences, warm coaching voice. Highlight one specific st
     return JSON.parse(extractJson(text));
   }
 
-  async scoreApproachDrill(params: {
+  async scoreNaiveApproachDrill(params: {
     problemPrompt: string;
-    userApproach: string;
+    userAnswer: string;
   }): Promise<{ score: number; feedback: string }> {
     const response = await this.client.messages.create({
       model: HAIKU,
@@ -344,23 +345,87 @@ Feedback must be 3–4 sentences, warm coaching voice. Highlight one specific st
       messages: [
         {
           role: 'user',
-          content: `You are a supportive coding coach scoring an approach description drill. The candidate described how they would solve a problem before coding.
+          content: `You are a supportive coding coach scoring a brute-force approach drill. The candidate described their naive solution to a problem.
 
 Problem:
 ${params.problemPrompt}
 
-Candidate's approach:
-${params.userApproach}
+Candidate's brute-force description:
+${params.userAnswer}
 
 Score 0–100 based on:
-- Correctness: is the algorithm fundamentally sound? (35 pts)
-- Brute force acknowledged: did they mention a naive solution and why it's too slow? (20 pts)
-- Complexity stated: did they give time and space complexity? (20 pts)
-- Edge cases: did they call out at least one edge case? (15 pts)
-- Clarity: is the explanation clear enough to code from? (10 pts)
+- Correctness: is the described algorithm a valid (even if slow) solution? (40 pts)
+- Complexity stated: did they give the time complexity? (30 pts)
+- Suboptimality explained: did they name WHY it is naive — the bottleneck, redundant work, or inefficient structure? (30 pts)
 
 Respond with JSON: { "score": number, "feedback": string }
-Feedback must be 3–4 sentences, warm coaching voice. Name one concrete strength and one specific thing to add or improve.`,
+Feedback must be 3–4 sentences, warm coaching voice. Praise what was clear; identify the weakest element specifically.`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return JSON.parse(extractJson(text));
+  }
+
+  async scoreImprovedApproachDrill(params: {
+    problemPrompt: string;
+    userAnswer: string;
+  }): Promise<{ score: number; feedback: string }> {
+    const response = await this.client.messages.create({
+      model: HAIKU,
+      max_tokens: 400,
+      messages: [
+        {
+          role: 'user',
+          content: `You are a supportive coding coach scoring an improvement drill. The candidate described how they would optimise their brute-force solution.
+
+Problem:
+${params.problemPrompt}
+
+Candidate's improved approach:
+${params.userAnswer}
+
+Score 0–100 based on:
+- Genuine improvement: is the described change actually faster or more space-efficient? (35 pts)
+- What changed: did they name the key insight, data structure, or technique that enables the improvement? (35 pts)
+- Complexity before and after: did they state both the old and new time AND space complexity? (30 pts)
+
+Respond with JSON: { "score": number, "feedback": string }
+Feedback must be 3–4 sentences, warm coaching voice. Name one concrete strength and one specific gap.`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return JSON.parse(extractJson(text));
+  }
+
+  async scoreOptimalApproachDrill(params: {
+    problemPrompt: string;
+    userAnswer: string;
+  }): Promise<{ score: number; feedback: string }> {
+    const response = await this.client.messages.create({
+      model: HAIKU,
+      max_tokens: 400,
+      messages: [
+        {
+          role: 'user',
+          content: `You are a supportive coding coach scoring an optimality drill. The candidate either described a further optimal solution or argued that their improved solution is already optimal.
+
+Problem:
+${params.problemPrompt}
+
+Candidate's response:
+${params.userAnswer}
+
+Score 0–100 based on:
+- Correctness of claim: is the solution they describe (or identify as optimal) actually optimal for this problem? (40 pts)
+- Justification: did they explain WHY no further improvement is possible (lower bound, theoretical limit, proof sketch)? (35 pts)
+- Complexity stated: did they state the final time and space complexity? (25 pts)
+
+Respond with JSON: { "score": number, "feedback": string }
+Feedback must be 3–4 sentences, warm coaching voice. Confirm or gently correct the optimality claim; name what the justification was missing if anything.`,
         },
       ],
     });

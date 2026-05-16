@@ -92,9 +92,7 @@ export class DojoService {
     const progressKey =
       drill.type === 'PATTERN_ID'
         ? drill.pattern!
-        : drill.type === 'CLARIFICATION'
-          ? 'CLARIFICATION'
-          : 'APPROACH';
+        : drill.type;
 
     // 4. Upsert dojo_progress and compute level/status changes
     const { newLevel, newXp, statusChange } = await this.updateProgress(
@@ -140,11 +138,16 @@ export class DojoService {
       });
     }
 
-    // APPROACH
-    return this.ai.scoreApproachDrill({
-      problemPrompt: drill.prompt,
-      userApproach: answer,
-    });
+    if (drill.type === 'APPROACH_NAIVE') {
+      return this.ai.scoreNaiveApproachDrill({ problemPrompt: drill.prompt, userAnswer: answer });
+    }
+
+    if (drill.type === 'APPROACH_IMPROVE') {
+      return this.ai.scoreImprovedApproachDrill({ problemPrompt: drill.prompt, userAnswer: answer });
+    }
+
+    // APPROACH_OPTIMAL
+    return this.ai.scoreOptimalApproachDrill({ problemPrompt: drill.prompt, userAnswer: answer });
   }
 
   private computeXp(type: string, score: number): number {
