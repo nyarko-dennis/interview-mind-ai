@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SessionPhase, InterviewerMode, SupportedLanguage, HintLevel } from '@interview-mind/shared';
+import type { SessionPhase, InterviewerMode, SupportedLanguage, HintLevel, ClarificationCoverage } from '@interview-mind/shared';
 
 export interface ChatMessage {
   role: 'ai' | 'user';
@@ -50,6 +50,9 @@ interface SessionStore {
   // Submission error (Judge0 unavailable — phase stays in IMPLEMENTATION for retry)
   submissionError: string | null;
 
+  // Clarification coverage tracker
+  clarificationCoverage: ClarificationCoverage;
+
   // Per-phase elapsed time tracking
   phaseStartedAt: number; // Date.now() snapshot when current phase began
 
@@ -74,6 +77,7 @@ interface SessionStore {
   setTestResults: (passed: number, total: number) => void;
   setRunOutput: (output: RunOutput) => void;
   setSubmissionError: (msg: string | null) => void;
+  setClarificationCoverage: (coverage: ClarificationCoverage) => void;
   setDebriefData: (data: DebriefScore) => void;
   setDebriefError: (msg: string) => void;
 }
@@ -94,6 +98,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   isRunning: false,
   runOutput: null,
   submissionError: null,
+  clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
   phaseStartedAt: Date.now(),
   reviewFeedback: null,
   debriefData: null,
@@ -115,6 +120,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       isRunning: false,
       runOutput: null,
       submissionError: null,
+      clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
       phaseStartedAt: Date.now(),
       reviewFeedback: null,
       debriefData: null,
@@ -144,6 +150,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setTestResults: (testsPassed, testsTotal) => set({ testsPassed, testsTotal }),
   setRunOutput: (runOutput) => set({ runOutput }),
   setSubmissionError: (submissionError) => set({ submissionError }),
+  setClarificationCoverage: (clarificationCoverage) => set({ clarificationCoverage }),
   setDebriefData: (debriefData) => set({ debriefData }),
   setDebriefError: (debriefError) => set({ debriefError }),
 }));

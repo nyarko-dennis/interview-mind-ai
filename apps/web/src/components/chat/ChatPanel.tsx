@@ -15,7 +15,7 @@ interface Props {
 const CHECKIN_DELAY_MS = 3 * 60 * 1000;
 
 export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) {
-  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, reviewFeedback } =
+  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, reviewFeedback, clarificationCoverage } =
     useSessionStore();
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -67,6 +67,37 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
         <p className="mb-2 text-sm font-semibold text-white">{problemTitle}</p>
         <p className="text-xs leading-relaxed text-muted">{problemStatement}</p>
       </div>
+
+      {/* Clarification coverage tracker */}
+      {phase === 'CLARIFICATION' && (
+        <div className="shrink-0 border-b border-border px-4 py-3">
+          <p className="mb-2 text-[9px] tracking-widest text-muted">COVERAGE</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {([
+              { key: 'INPUT',       label: 'Input',       min: 3 },
+              { key: 'OUTPUT',      label: 'Output',      min: 3 },
+              { key: 'EDGE_CASES',  label: 'Edge Cases',  min: 3 },
+              { key: 'CONSTRAINTS', label: 'Constraints', min: 2 },
+            ] as const).map(({ key, label, min }) => {
+              const count = clarificationCoverage[key];
+              const done = count >= min;
+              return (
+                <div key={key} className="flex items-center gap-1.5">
+                  <span className={`text-[10px] ${done ? 'text-accent' : 'text-muted'}`}>
+                    {done ? '✓' : '○'}
+                  </span>
+                  <span className={`text-[10px] ${done ? 'text-white/70' : 'text-muted'}`}>
+                    {label}
+                  </span>
+                  <span className="ml-auto text-[10px] tabular-nums text-muted">
+                    {count}/{min}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Transcript */}
       <div className="flex-1 space-y-4 overflow-y-auto p-4">

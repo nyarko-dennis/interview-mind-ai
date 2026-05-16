@@ -60,6 +60,7 @@ export const sessions = pgTable('sessions', {
   hintsUsed: jsonb('hints_used').notNull().default('[]'),
   maxHintLevel: integer('max_hint_level').notNull().default(0),
   clarificationAttempts: integer('clarification_attempts').notNull().default(0),
+  clarificationCoverage: jsonb('clarification_coverage').notNull().default('{"INPUT":0,"OUTPUT":0,"CONSTRAINTS":0,"EDGE_CASES":0}'),
   startedAt: timestamp('started_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
 });

@@ -11,7 +11,7 @@ import { PhaseIndicator } from '@/components/session/PhaseIndicator';
 import { useSessionStore } from '@/lib/store';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import { WsServerEvents } from '@interview-mind/shared';
-import type { SessionPhase, InterviewerMode, HintLevel } from '@interview-mind/shared';
+import type { SessionPhase, InterviewerMode, HintLevel, ClarificationResult } from '@interview-mind/shared';
 
 interface Props {
   sessionId: string;
@@ -55,6 +55,7 @@ export function SessionArena({
     setHintLevel,
     setSubmissionError,
     setReviewFeedback,
+    setClarificationCoverage,
     setDebriefData,
     setDebriefError,
     initSession,
@@ -91,8 +92,9 @@ export function SessionArena({
       setPhase(phase);
     });
 
-    socket.on(WsServerEvents.CLARIFICATION_RESULT, (result: { passed: boolean; feedback: string }) => {
+    socket.on(WsServerEvents.CLARIFICATION_RESULT, (result: ClarificationResult) => {
       addMessage({ role: 'ai', content: result.feedback });
+      setClarificationCoverage(result.coverage);
     });
 
     socket.on(WsServerEvents.APPROACH_RESULT, (result: { accepted: boolean; probe?: string }) => {

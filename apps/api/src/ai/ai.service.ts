@@ -19,7 +19,7 @@ export class AiService {
   async evaluateClarification(
     problemStatement: string,
     question: string,
-  ): Promise<{ passed: boolean; feedback: string }> {
+  ): Promise<{ passed: boolean; feedback: string; category: 'INPUT' | 'OUTPUT' | 'CONSTRAINTS' | 'EDGE_CASES' }> {
     const response = await this.client.messages.create({
       model: HAIKU,
       max_tokens: 256,
@@ -32,8 +32,16 @@ Problem: ${problemStatement}
 
 Candidate's clarifying question: "${question}"
 
-Respond with JSON: { "passed": boolean, "feedback": string }
-A question passes if it asks about constraints, edge cases, or expected output format in a substantive way.
+Classify the question into exactly one category:
+- INPUT: questions about input format, data types, value ranges, or input structure
+- OUTPUT: questions about what to return, output format, or expected results
+- CONSTRAINTS: questions about time/space complexity requirements or problem-size limits
+- EDGE_CASES: questions about boundary conditions, empty/null inputs, duplicates, or special values
+
+A question passes if it is substantive and specific to this problem.
+Vague questions ("any constraints?") or questions answerable from the problem statement do not pass.
+
+Respond with JSON only: { "passed": boolean, "feedback": string, "category": "INPUT" | "OUTPUT" | "CONSTRAINTS" | "EDGE_CASES" }
 Keep feedback to one sentence.`,
         },
       ],

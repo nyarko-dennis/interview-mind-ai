@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "clarification_coverage" jsonb DEFAULT '{"INPUT":0,"OUTPUT":0,"CONSTRAINTS":0,"EDGE_CASES":0}' NOT NULL;

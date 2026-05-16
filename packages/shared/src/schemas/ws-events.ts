@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ClarificationCategory, ClarificationCoverage } from '../types/session';
 
 // Client → Server
 export const JoinSessionPayload = z.object({ sessionId: z.string().uuid() });
@@ -40,6 +41,8 @@ export type WsServerEvent = typeof WsServerEvents[keyof typeof WsServerEvents];
 export type ClarificationResult = {
   passed: boolean;
   feedback: string;
+  category: ClarificationCategory | null;
+  coverage: ClarificationCoverage;
 };
 
 export type ApproachResult = {

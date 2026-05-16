@@ -12,6 +12,7 @@ import type {
   InterviewerMode,
   SupportedLanguage,
   HintLevel,
+  ClarificationCoverage,
 } from '@interview-mind/shared';
 
 @Injectable()
@@ -62,19 +63,79 @@ export class SessionService {
     return { ...session, problem };
   }
 
-  // Thresholds for progressive clarification guidance (PRD §9 Q4).
-  private static readonly CLARIFICATION_HINT_THRESHOLD = 3;   // start adding hints
-  private static readonly CLARIFICATION_WARN_THRESHOLD = 5;   // score-impact warning
-  private static readonly CLARIFICATION_AUTO_ADVANCE   = 10;  // auto-advance as last resort
+  // Per-category minimums required before advancing to APPROACH.
+  private static readonly CLARIFICATION_MINIMUMS: ClarificationCoverage = {
+    INPUT: 3,
+    OUTPUT: 3,
+    CONSTRAINTS: 2,
+    EDGE_CASES: 3,
+  };
+
+  // Category weights for communication score (must sum to 100).
+  private static readonly CLARIFICATION_WEIGHTS: ClarificationCoverage = {
+    INPUT: 30,
+    OUTPUT: 30,
+    EDGE_CASES: 25,
+    CONSTRAINTS: 15,
+  };
+
+  // Progressive guidance thresholds (total questions asked).
+  private static readonly CLARIFICATION_HINT_THRESHOLD = 3;
+  private static readonly CLARIFICATION_WARN_THRESHOLD = 5;
+  private static readonly CLARIFICATION_AUTO_ADVANCE   = 10;
+
+  private static readonly EMPTY_COVERAGE: ClarificationCoverage = {
+    INPUT: 0,
+    OUTPUT: 0,
+    CONSTRAINTS: 0,
+    EDGE_CASES: 0,
+  };
+
+  private isCoverageComplete(coverage: ClarificationCoverage): boolean {
+    const mins = SessionService.CLARIFICATION_MINIMUMS;
+    return (
+      coverage.INPUT >= mins.INPUT &&
+      coverage.OUTPUT >= mins.OUTPUT &&
+      coverage.CONSTRAINTS >= mins.CONSTRAINTS &&
+      coverage.EDGE_CASES >= mins.EDGE_CASES
+    );
+  }
+
+  private missingCategories(coverage: ClarificationCoverage): string {
+    const mins = SessionService.CLARIFICATION_MINIMUMS;
+    const labels: Record<keyof ClarificationCoverage, string> = {
+      INPUT: 'input understanding',
+      OUTPUT: 'output format',
+      CONSTRAINTS: 'constraints',
+      EDGE_CASES: 'edge cases',
+    };
+    return (Object.keys(mins) as Array<keyof ClarificationCoverage>)
+      .filter((k) => coverage[k] < mins[k])
+      .map((k) => labels[k])
+      .join(', ');
+  }
+
+  computeCommunicationScore(coverage: ClarificationCoverage): number {
+    const mins = SessionService.CLARIFICATION_MINIMUMS;
+    const weights = SessionService.CLARIFICATION_WEIGHTS;
+    return Math.round(
+      (Math.min(coverage.INPUT / mins.INPUT, 1) * weights.INPUT) +
+      (Math.min(coverage.OUTPUT / mins.OUTPUT, 1) * weights.OUTPUT) +
+      (Math.min(coverage.CONSTRAINTS / mins.CONSTRAINTS, 1) * weights.CONSTRAINTS) +
+      (Math.min(coverage.EDGE_CASES / mins.EDGE_CASES, 1) * weights.EDGE_CASES),
+    );
+  }
 
   async evaluateClarification(sessionId: string, question: string) {
     const session = await this.getById(sessionId);
     this.assertPhase(session.phase as SessionPhase, 'CLARIFICATION');
 
     const attempts = session.clarificationAttempts ?? 0;
+    const coverage: ClarificationCoverage =
+      (session.clarificationCoverage as ClarificationCoverage) ??
+      SessionService.EMPTY_COVERAGE;
 
-    // Hard limit: after 10 failed attempts the user is clearly stuck.
-    // Auto-advance so they can continue; communication score reflects the gap.
+    // Hard limit: auto-advance after 10 questions so the session can continue.
     if (attempts >= SessionService.CLARIFICATION_AUTO_ADVANCE) {
       await this.db
         .update(sessions)
@@ -84,42 +145,52 @@ export class SessionService {
       return {
         passed: true,
         feedback:
-          'Moving on to approach. Strong clarification is key to your communication score — focus on constraints, edge cases, and output format in future sessions.',
+          'Moving on to approach. In future sessions, focus on covering input types, output format, constraints, and edge cases to maximise your communication score.',
+        category: null,
+        coverage,
       };
     }
 
     const problem = await this.problems.findById(session.problemId);
     const result = await this.ai.evaluateClarification(problem.statement, question);
 
+    // Only credit coverage when the AI judges the question substantive.
+    const newCoverage: ClarificationCoverage = { ...coverage };
     if (result.passed) {
-      await this.db
-        .update(sessions)
-        .set({ clarificationAttempts: 0 })
-        .where(eq(sessions.id, sessionId));
-      await this.transitionPhase(sessionId, 'APPROACH');
-      return result;
+      newCoverage[result.category] = (newCoverage[result.category] ?? 0) + 1;
     }
 
-    // Increment the failed-attempt counter.
     const newAttempts = attempts + 1;
+    const coverageComplete = this.isCoverageComplete(newCoverage);
+
     await this.db
       .update(sessions)
-      .set({ clarificationAttempts: newAttempts })
+      .set({ clarificationAttempts: newAttempts, clarificationCoverage: newCoverage })
       .where(eq(sessions.id, sessionId));
 
-    // Augment the AI feedback with progressive guidance.
+    if (coverageComplete) {
+      await this.transitionPhase(sessionId, 'APPROACH');
+      return {
+        passed: true,
+        feedback: "Excellent — you've covered all the key areas. Let's move to your approach.",
+        category: result.category,
+        coverage: newCoverage,
+      };
+    }
+
+    // Phase stays in CLARIFICATION — augment feedback with progressive guidance.
     let feedback = result.feedback;
+    const missing = this.missingCategories(newCoverage);
 
     if (newAttempts >= SessionService.CLARIFICATION_WARN_THRESHOLD) {
       feedback +=
-        ` (Attempt ${newAttempts}/${SessionService.CLARIFICATION_AUTO_ADVANCE}: repeated failures affect your communication score.` +
-        ' Try asking about input size limits, whether values can be negative, duplicate handling, or exact output format.)';
+        ` (Attempt ${newAttempts}/${SessionService.CLARIFICATION_AUTO_ADVANCE}: your communication score is affected.` +
+        ` Still needed: ${missing}.)`;
     } else if (newAttempts >= SessionService.CLARIFICATION_HINT_THRESHOLD) {
-      feedback +=
-        ' (Tip: good clarifying questions ask about input constraints, edge cases, or expected output format.)';
+      feedback += ` (Tip: you still need to cover ${missing}.)`;
     }
 
-    return { passed: false, feedback };
+    return { passed: false, feedback, category: result.category, coverage: newCoverage };
   }
 
   async evaluateApproach(sessionId: string, description: string) {
@@ -240,9 +311,11 @@ export class SessionService {
         ? Math.round((params.testsPassed / params.testsTotal) * 100)
         : 0;
     const independence = this.scoring.computeIndependence(hintsUsed);
-    // Efficiency and communication require richer telemetry; use sensible defaults for now
     const efficiency = 75;
-    const communication = 70;
+    const coverage =
+      (session.clarificationCoverage as ClarificationCoverage) ??
+      SessionService.EMPTY_COVERAGE;
+    const communication = this.computeCommunicationScore(coverage);
 
     const debriefReport = await this.ai.generateDebrief({
       problemTitle: session.problem.title,
