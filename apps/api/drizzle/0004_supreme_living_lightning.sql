@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "approach_history" jsonb DEFAULT '{"NAIVE":[],"IMPROVE":[],"OPTIMAL":[]}' NOT NULL;

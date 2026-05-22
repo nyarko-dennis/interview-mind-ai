@@ -10,14 +10,12 @@ const PHASES: { phase: SessionPhase; label: string }[] = [
 ];
 
 export function PhaseIndicator({ phase }: { phase: SessionPhase }) {
-  // REVIEW is a brief internal state between IMPLEMENTATION and DEBRIEF — keep IMPLEMENTATION lit
-  const displayPhase: SessionPhase = phase === 'REVIEW' ? 'IMPLEMENTATION' : phase;
-  const currentIdx = PHASES.findIndex((p) => p.phase === displayPhase);
+  const currentIdx = PHASES.findIndex((p) => p.phase === phase);
 
   return (
     <div className="flex items-center gap-1">
       {PHASES.map(({ phase: p, label }, i) => {
-        const isActive = p === displayPhase;
+        const isActive = p === phase;
         const isPast = currentIdx !== -1 && i < currentIdx;
 
         return (

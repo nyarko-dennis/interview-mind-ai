@@ -60,20 +60,27 @@ export class SessionGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @SubscribeMessage('clarification:submit')
   async handleClarification(
     @ConnectedSocket() _client: Socket,
-    @MessageBody() data: { sessionId: string; question: string },
+    @MessageBody() data: { sessionId: string; input: string },
   ) {
-    const result = await this.sessionService.evaluateClarification(
-      data.sessionId,
-      data.question,
-    );
-    this.server
-      .to(data.sessionId)
-      .emit(WsServerEvents.CLARIFICATION_RESULT, result);
-
-    if (result.passed) {
+    try {
+      const result = await this.sessionService.evaluateClarification(
+        data.sessionId,
+        data.input,
+      );
       this.server
         .to(data.sessionId)
-        .emit(WsServerEvents.PHASE_CHANGE, { phase: 'APPROACH' });
+        .emit(WsServerEvents.CLARIFICATION_RESULT, result);
+
+      if (result.passed) {
+        this.server
+          .to(data.sessionId)
+          .emit(WsServerEvents.PHASE_CHANGE, { phase: 'APPROACH' });
+      }
+    } catch (err) {
+      this.server.to(data.sessionId).emit(WsServerEvents.SESSION_ERROR, {
+        message: 'Failed to evaluate clarification — please try again',
+        context: 'clarification',
+      });
     }
   }
 
@@ -82,16 +89,23 @@ export class SessionGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @ConnectedSocket() _client: Socket,
     @MessageBody() data: { sessionId: string; description: string },
   ) {
-    const result = await this.sessionService.evaluateApproach(
-      data.sessionId,
-      data.description,
-    );
-    this.server.to(data.sessionId).emit(WsServerEvents.APPROACH_RESULT, result);
+    try {
+      const result = await this.sessionService.evaluateApproach(
+        data.sessionId,
+        data.description,
+      );
+      this.server.to(data.sessionId).emit(WsServerEvents.APPROACH_RESULT, result);
 
-    if (result.advanceToImplementation) {
-      this.server
-        .to(data.sessionId)
-        .emit(WsServerEvents.PHASE_CHANGE, { phase: 'IMPLEMENTATION' });
+      if (result.advanceToImplementation) {
+        this.server
+          .to(data.sessionId)
+          .emit(WsServerEvents.PHASE_CHANGE, { phase: 'IMPLEMENTATION' });
+      }
+    } catch (err) {
+      this.server.to(data.sessionId).emit(WsServerEvents.SESSION_ERROR, {
+        message: 'Failed to evaluate approach — please try again',
+        context: 'approach',
+      });
     }
   }
 
@@ -100,20 +114,47 @@ export class SessionGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @ConnectedSocket() _client: Socket,
     @MessageBody() data: { sessionId: string },
   ) {
-    const { level, isCeiling, hintContent, problemStatement, context } =
-      await this.sessionService.requestHint(data.sessionId);
+    const session = await this.sessionService.getById(data.sessionId);
+    if (session.mode === 'STRICT') {
+      this.server.to(data.sessionId).emit(WsServerEvents.SESSION_ERROR, {
+        message: 'Hints are disabled in strict mode',
+        context: 'hint',
+      });
+      return;
+    }
+
+    let hintResult;
+    try {
+      hintResult = await this.sessionService.requestHint(data.sessionId);
+    } catch (err: any) {
+      const body = err?.response ?? {};
+      if (body.code === 'INSUFFICIENT_XP') {
+        this.server.to(data.sessionId).emit(WsServerEvents.SESSION_ERROR, {
+          message: `Not enough XP — this hint costs ${body.xpNeeded} XP (you have ${body.xpBalance}).`,
+          context: 'hint',
+          xpNeeded: body.xpNeeded,
+          xpBalance: body.xpBalance,
+        });
+      } else {
+        this.server.to(data.sessionId).emit(WsServerEvents.SESSION_ERROR, {
+          message: 'Failed to load hint — please try again',
+          context: 'hint',
+        });
+      }
+      return;
+    }
+
+    const { level, isCeiling, hintContent, problemStatement, context, xpBalance } = hintResult;
 
     if (hintContent) {
-      // Serve from the curated hint bank — no LLM cost
       this.server.to(data.sessionId).emit(WsServerEvents.AI_STREAM_CHUNK, { chunk: hintContent });
     } else {
-      // Fallback: generate via LLM (covers problems not yet in the hint bank)
-      for await (const chunk of this.ai.streamHint(problemStatement, level, context)) {
+      for await (const chunk of this.ai.streamHint(problemStatement, level, context, session.persona ?? 'STANDARD')) {
         this.server.to(data.sessionId).emit(WsServerEvents.AI_STREAM_CHUNK, { chunk });
       }
     }
 
-    this.server.to(data.sessionId).emit(WsServerEvents.AI_STREAM_END, { level, isCeiling });
+    this.server.to(data.sessionId).emit(WsServerEvents.AI_STREAM_END, { level, isCeiling, xpBalance });
   }
 
   @SubscribeMessage('code:submit')
@@ -131,52 +172,20 @@ export class SessionGateway implements OnGatewayConnection, OnGatewayDisconnect 
       );
 
       this.server.to(data.sessionId).emit(WsServerEvents.CODE_RESULT, result);
-      // Advance to REVIEW — debrief fires only after review:submit is accepted.
-      this.server.to(data.sessionId).emit(WsServerEvents.PHASE_CHANGE, { phase: 'REVIEW' });
+      this.server.to(data.sessionId).emit(WsServerEvents.PHASE_CHANGE, { phase: 'DEBRIEF' });
 
-      // Stash submission details on the socket so review:submit can access them.
-      client.data.pendingDebrief = {
-        sessionId: data.sessionId,
-        code: data.code,
-        language: data.language,
-        testsPassed: result.testsPassed,
-        testsTotal: result.testsTotal,
-      };
+      void this.generateAndEmitDebrief(
+        data.sessionId,
+        data.code,
+        data.language,
+        { testsPassed: result.testsPassed, testsTotal: result.testsTotal },
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Code execution service unavailable';
       this.server
         .to(data.sessionId)
         .emit(WsServerEvents.SESSION_ERROR, { message, context: 'submission' });
-    }
-  }
-
-  @SubscribeMessage('review:submit')
-  async handleReviewSubmit(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { sessionId: string; response: string },
-  ) {
-    const pending = client.data.pendingDebrief as {
-      sessionId: string; code: string; language: SupportedLanguage;
-      testsPassed: number; testsTotal: number;
-    } | undefined;
-
-    const code = pending?.code ?? '';
-    const result = await this.sessionService.evaluateReview(data.sessionId, data.response, code);
-
-    this.server.to(data.sessionId).emit(WsServerEvents.REVIEW_RESULT, result);
-
-    if (result.accepted) {
-      this.server.to(data.sessionId).emit(WsServerEvents.PHASE_CHANGE, { phase: 'DEBRIEF' });
-
-      if (pending) {
-        void this.generateAndEmitDebrief(
-          pending.sessionId,
-          pending.code,
-          pending.language,
-          { testsPassed: pending.testsPassed, testsTotal: pending.testsTotal },
-        );
-      }
     }
   }
 

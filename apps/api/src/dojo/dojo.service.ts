@@ -247,11 +247,13 @@ export class DojoService {
     // Detect week rollover (first activity of a new week)
     const isNewWeek = !existing || existing.weekStart !== thisMonday;
     if (isNewWeek) {
+      const prevWeekXp = existing?.currentWeekXp ?? 0;
+      const goalMet = prevWeekXp >= weeklyGoal;
       currentWeekXp = 0; // reset weekly counter
-      if (existing?.lastActiveWeek === lastMonday) {
-        streakWeeks += 1; // consecutive weeks
+      if (existing?.lastActiveWeek === lastMonday && goalMet) {
+        streakWeeks += 1; // consecutive weeks where goal was met
       } else {
-        streakWeeks = 1; // first time or missed a week
+        streakWeeks = 1; // first time, missed a week, or goal not met last week
       }
     }
 
@@ -327,6 +329,7 @@ export class DojoService {
     return {
       currentWeekXp,
       weeklyGoal,
+      totalXp: gam?.totalXp ?? 0,
       streakWeeks: gam?.streakWeeks ?? 0,
       goalMet: currentWeekXp >= weeklyGoal,
       progressPct: Math.min(Math.round((currentWeekXp / weeklyGoal) * 100), 100),

@@ -59,17 +59,18 @@ interface SessionStore {
   // Per-phase elapsed time tracking
   phaseStartedAt: number; // Date.now() snapshot when current phase began
 
-  // Review phase
-  reviewFeedback: string | null;
+  // XP economy
+  xpBalance: number;
 
   // Debrief
   debriefData: DebriefScore | null;
   debriefError: string | null;
 
   // Actions
-  initSession: (params: { sessionId: string; phase: SessionPhase; mode: InterviewerMode; hintCeiling: number; functionStub?: string }) => void;
+  functionStubs: Record<string, string>;
+  initSession: (params: { sessionId: string; phase: SessionPhase; mode: InterviewerMode; hintCeiling: number; functionStub?: string; functionStubs?: Record<string, string> }) => void;
   setPhase: (phase: SessionPhase) => void;
-  setReviewFeedback: (feedback: string | null) => void;
+  setXpBalance: (xp: number) => void;
   setCode: (code: string) => void;
   setLanguage: (lang: SupportedLanguage) => void;
   addMessage: (msg: ChatMessage) => void;
@@ -103,18 +104,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   runOutput: null,
   submissionError: null,
   clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
+  functionStubs: {},
   approachStep: null,
   phaseStartedAt: Date.now(),
-  reviewFeedback: null,
+  xpBalance: 0,
   debriefData: null,
   debriefError: null,
 
-  initSession: ({ sessionId, phase, mode, hintCeiling, functionStub }) =>
+  initSession: ({ sessionId, phase, mode, hintCeiling, functionStub, functionStubs }) =>
     set({
       sessionId,
       phase,
       mode,
       hintCeiling,
+      functionStubs: functionStubs ?? {},
       code: functionStub ?? '',
       messages: [],
       streamingChunk: '',
@@ -128,15 +131,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       clarificationCoverage: { INPUT: 0, OUTPUT: 0, CONSTRAINTS: 0, EDGE_CASES: 0 },
       approachStep: null,
       phaseStartedAt: Date.now(),
-      reviewFeedback: null,
       debriefData: null,
       debriefError: null,
     }),
 
   setPhase: (phase) => set({ phase, phaseStartedAt: Date.now() }),
-  setReviewFeedback: (reviewFeedback) => set({ reviewFeedback }),
+  setXpBalance: (xpBalance) => set({ xpBalance }),
   setCode: (code) => set({ code }),
-  setLanguage: (language) => set({ language }),
+  setLanguage: (language) => set((s) => {
+    const stub = s.functionStubs[language];
+    return stub !== undefined ? { language, code: stub } : { language };
+  }),
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
   appendStreamChunk: (chunk) =>
     set((s) => ({ streamingChunk: s.streamingChunk + chunk, isHintStreaming: true })),

@@ -17,6 +17,7 @@ const LANGUAGE_IDS: Record<SupportedLanguage, number> = {
   java: 62,        // Java
   cpp: 54,         // C++ (GCC 9.2.0)
   go: 60,          // Go
+  kotlin: 78,      // Kotlin
 };
 
 interface SubmissionResult {

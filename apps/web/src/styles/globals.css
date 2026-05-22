@@ -39,3 +39,13 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #6C63FF;
 }
+
+/* Monaco editor error line decorations */
+.im-error-line {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+.im-error-gutter {
+  background-color: #ef4444;
+  width: 3px !important;
+  margin-left: 3px;
+}

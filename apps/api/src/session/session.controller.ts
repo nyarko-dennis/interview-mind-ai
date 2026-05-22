@@ -3,7 +3,7 @@ import { SessionService } from './session.service';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/jwt.strategy';
-import type { InterviewerMode } from '@interview-mind/shared';
+import type { InterviewerMode, InterviewerPersona } from '@interview-mind/shared';
 
 @Controller('sessions')
 @UseGuards(JwtAuthGuard)
@@ -17,7 +17,7 @@ export class SessionController {
 
   @Post()
   create(
-    @Body() body: { userId: string; problemId: string; mode: InterviewerMode },
+    @Body() body: { userId: string; problemId: string; mode: InterviewerMode; persona?: InterviewerPersona },
   ) {
     return this.sessionService.create(body);
   }

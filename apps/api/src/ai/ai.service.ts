@@ -6,6 +6,21 @@ import Anthropic from '@anthropic-ai/sdk';
 const HAIKU = 'claude-haiku-4-5-20251001';
 const SONNET = 'claude-sonnet-4-6';
 
+function getPersonaInstruction(persona: string): string {
+  switch (persona) {
+    case 'DISINTERESTED':
+      return 'You are a distracted, disinterested interviewer. Keep all responses to 1–2 short sentences. Show minimal enthusiasm. Do not over-explain or encourage.';
+    case 'NITPICKER':
+      return 'You are a demanding, nitpicking interviewer. Always probe for precision — edge cases, naming, correctness, complexity claims. Never let vague answers slide without pushing back.';
+    case 'BACKSEAT_CODER':
+      return 'You are an opinionated interviewer who always offers an alternative perspective or counterpoint. Sometimes your suggestions are genuinely better; sometimes they are deliberate distractions. Always add a "but have you considered…" angle.';
+    case 'COACH':
+      return 'You are a warm, encouraging coach. Lead with positive reinforcement before giving critical feedback. Be generous with praise for good thinking.';
+    default:
+      return 'You are a professional technical interviewer.';
+  }
+}
+
 function extractJson(text: string): string {
   // Strip markdown code fences if the model wraps its JSON output
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -18,7 +33,8 @@ export class AiService {
 
   async evaluateClarification(
     problemStatement: string,
-    question: string,
+    input: string,
+    persona = 'STANDARD',
   ): Promise<{ passed: boolean; feedback: string; category: 'INPUT' | 'OUTPUT' | 'CONSTRAINTS' | 'EDGE_CASES' }> {
     const response = await this.client.messages.create({
       model: HAIKU,
@@ -26,20 +42,25 @@ export class AiService {
       messages: [
         {
           role: 'user',
-          content: `You are evaluating a clarifying question asked during a technical interview.
+          content: `${getPersonaInstruction(persona)} You are evaluating a candidate's clarification input during a technical interview.
 
 Problem: ${problemStatement}
 
-Candidate's clarifying question: "${question}"
+Candidate's input: "${input}"
 
-Classify the question into exactly one category:
-- INPUT: questions about input format, data types, value ranges, or input structure
-- OUTPUT: questions about what to return, output format, or expected results
-- CONSTRAINTS: questions about time/space complexity requirements or problem-size limits
-- EDGE_CASES: questions about boundary conditions, empty/null inputs, duplicates, or special values
+The candidate may submit:
+- A clarifying question about an aspect not explicitly covered by the problem
+- A stated inference drawn from the problem (e.g. "Since the input is integers, I'll assume negatives are possible")
+- A confirmed assumption about an area the problem partially addresses
 
-A question passes if it is substantive and specific to this problem.
-Vague questions ("any constraints?") or questions answerable from the problem statement do not pass.
+Classify the input into exactly one category:
+- INPUT: input format, data types, value ranges, or input structure
+- OUTPUT: what to return, output format, or expected results
+- CONSTRAINTS: time/space complexity requirements or problem-size limits
+- EDGE_CASES: boundary conditions, empty/null inputs, duplicates, or special values
+
+Pass if the input is substantive and demonstrates genuine consideration of that aspect of the problem.
+Fail only vague or content-free inputs (e.g. "any constraints?" with no reasoning, or pure restatements of the problem with no added thought).
 
 Respond with JSON only: { "passed": boolean, "feedback": string, "category": "INPUT" | "OUTPUT" | "CONSTRAINTS" | "EDGE_CASES" }
 Keep feedback to one sentence.`,
@@ -54,6 +75,7 @@ Keep feedback to one sentence.`,
   async evaluateNaiveApproach(
     problemStatement: string,
     description: string,
+    persona = 'STANDARD',
   ): Promise<{ accepted: boolean; probe?: string }> {
     const response = await this.client.messages.create({
       model: HAIKU,
@@ -61,7 +83,7 @@ Keep feedback to one sentence.`,
       messages: [
         {
           role: 'user',
-          content: `You are a senior engineer interviewer. The candidate is describing their brute-force solution.
+          content: `${getPersonaInstruction(persona)} The candidate is describing their brute-force solution.
 
 Problem: ${problemStatement}
 Candidate's brute-force description: "${description}"
@@ -85,6 +107,7 @@ Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
   async evaluateImprovedApproach(
     problemStatement: string,
     description: string,
+    persona = 'STANDARD',
   ): Promise<{ accepted: boolean; probe?: string }> {
     const response = await this.client.messages.create({
       model: HAIKU,
@@ -92,7 +115,7 @@ Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
       messages: [
         {
           role: 'user',
-          content: `You are a senior engineer interviewer. The candidate is describing an improvement over their brute-force solution.
+          content: `${getPersonaInstruction(persona)} The candidate is describing an improvement over their brute-force solution.
 
 Problem: ${problemStatement}
 Candidate's improved approach: "${description}"
@@ -117,6 +140,7 @@ Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
     problemStatement: string,
     optimalTimeComplexity: string | null,
     description: string,
+    persona = 'STANDARD',
   ): Promise<{ accepted: boolean; probe?: string }> {
     const complexityHint = optimalTimeComplexity
       ? `The known optimal time complexity for this problem is ${optimalTimeComplexity}.`
@@ -128,7 +152,7 @@ Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
       messages: [
         {
           role: 'user',
-          content: `You are a senior engineer interviewer. The candidate is describing what they believe is the optimal solution, or arguing that their improved solution is already optimal.
+          content: `${getPersonaInstruction(persona)} The candidate is describing what they believe is the optimal solution, or arguing that their improved solution is already optimal.
 
 Problem: ${problemStatement}
 ${complexityHint}
@@ -150,46 +174,6 @@ Respond with JSON only: { "accepted": boolean, "probe"?: string }`,
     return JSON.parse(extractJson(text));
   }
 
-  async evaluateReview(params: {
-    problemStatement: string;
-    code: string;
-    candidateReview: string;
-  }): Promise<{ accepted: boolean; feedback: string }> {
-    const response = await this.client.messages.create({
-      model: HAIKU,
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: `You are a technical interviewer evaluating a candidate's post-implementation review.
-
-Problem: ${params.problemStatement}
-
-Code submitted:
-\`\`\`
-${params.code.slice(0, 800)}
-\`\`\`
-
-Candidate's review: "${params.candidateReview}"
-
-Accept if the candidate made a genuine attempt to:
-- State time complexity (O(n), O(n log n), etc.)
-- State space complexity
-- Mention at least one concrete test case or edge case they would verify
-
-Accept even if the complexities are slightly off — the habit matters more than perfect accuracy at this stage.
-Reject only if the response is entirely absent of complexity discussion or test cases.
-
-Respond with JSON: { "accepted": boolean, "feedback": string }
-Feedback: 1-2 sentences. If accepted, briefly affirm what was good and note anything to sharpen. If rejected, tell them specifically what's missing.`,
-        },
-      ],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    return JSON.parse(extractJson(text));
-  }
-
   async generateDebrief(params: {
     problemTitle: string;
     code: string;
@@ -197,41 +181,61 @@ Feedback: 1-2 sentences. If accepted, briefly affirm what was good and note anyt
     testsPassed: number;
     testsTotal: number;
     hintsUsed: number[];
-    clarificationNotes: string;
-    approachNotes: string;
+    clarificationCoverage: Record<string, number>;
+    clarificationAttempts: number;
+    approachHistory: Record<string, string[]>;
+    persona?: string;
   }): Promise<string> {
+    const coverageSummary = Object.entries(params.clarificationCoverage)
+      .map(([k, v]) => `${k}: ${v > 0 ? 'covered' : 'missed'}`)
+      .join(', ');
+    const approachSummary = Object.entries(params.approachHistory)
+      .filter(([, msgs]) => msgs.length > 0)
+      .map(([step, msgs]) => `${step}: ${msgs.join(' / ')}`)
+      .join('\n');
+
     const response = await this.client.messages.create({
       model: SONNET,
       max_tokens: 1024,
       messages: [
         {
           role: 'user',
-          content: `Generate a structured debrief for a technical interview session.
+          content: `${getPersonaInstruction(params.persona ?? 'STANDARD')} Generate a structured debrief for a technical interview session.
 
 Problem: ${params.problemTitle}
 Language: ${params.language}
 Test results: ${params.testsPassed}/${params.testsTotal} passed
 Hints used: levels ${params.hintsUsed.join(', ') || 'none'}
-Clarification phase notes: ${params.clarificationNotes}
-Approach phase notes: ${params.approachNotes}
+Clarification coverage: ${coverageSummary}
+Clarification attempts: ${params.clarificationAttempts}
+Approach discussion:
+${approachSummary || 'N/A'}
 
 Code submitted:
 \`\`\`${params.language}
 ${params.code}
 \`\`\`
 
-Write a concise debrief covering: time/space complexity analysis, edge case coverage, communication quality, and one concrete improvement suggestion.`,
+Respond with JSON only — no markdown fences:
+{
+  "complexity": "1–2 sentences on the time/space complexity of the submitted code",
+  "edgeCases": "1–2 sentences on how well edge cases were identified and handled",
+  "communication": "1–2 sentences on the quality of clarifications and approach explanation",
+  "improvement": "One concrete, actionable thing to do better next time"
+}`,
         },
       ],
     });
 
-    return response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return text;
   }
 
   async *streamHint(
     problemStatement: string,
     hintLevel: number,
     context: string,
+    persona = 'STANDARD',
   ): AsyncGenerator<string> {
     const stream = await this.client.messages.stream({
       model: HAIKU,
@@ -239,7 +243,7 @@ Write a concise debrief covering: time/space complexity analysis, edge case cove
       messages: [
         {
           role: 'user',
-          content: `You are coaching a candidate through a technical problem. Provide a Level ${hintLevel} hint.
+          content: `${getPersonaInstruction(persona)} Provide a Level ${hintLevel} hint to a candidate working through a technical problem.
 
 Rules:
 - Never write or complete code for the candidate

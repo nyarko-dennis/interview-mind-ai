@@ -11,31 +11,25 @@ interface Props {
   problemStatement: string;
 }
 
-// GUIDED mode: emit a check-in request once after 3 minutes of implementation time.
-const CHECKIN_DELAY_MS = 3 * 60 * 1000;
 
 export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) {
-  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, reviewFeedback, clarificationCoverage, approachStep } =
+  const { phase, mode, messages, streamingChunk, isHintStreaming, hintLevel, hintCeiling, xpBalance, clarificationCoverage, approachStep } =
     useSessionStore();
+
+  const HINT_COSTS: Record<number, number> = { 1: 5, 2: 15, 3: 40, 4: 80 };
+  const nextHintLevel = hintLevel + 1;
+  const nextHintCost = HINT_COSTS[nextHintLevel] ?? 5;
+  const canAffordHint = xpBalance >= nextHintCost;
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const checkinFiredRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingChunk]);
 
-  // Check-in timer: GUIDED mode only, fires once 3 minutes into IMPLEMENTATION.
-  useEffect(() => {
-    if (phase !== 'IMPLEMENTATION' || mode !== 'GUIDED' || checkinFiredRef.current) return;
-    checkinFiredRef.current = false; // reset when entering implementation
-    const id = setTimeout(() => {
-      if (checkinFiredRef.current) return;
-      checkinFiredRef.current = true;
-      getSocket().emit('checkin:request', { sessionId });
-    }, CHECKIN_DELAY_MS);
-    return () => clearTimeout(id);
-  }, [phase, mode, sessionId]);
+  function requestCheckin() {
+    getSocket().emit('checkin:request', { sessionId });
+  }
 
   function sendMessage() {
     const text = input.trim();
@@ -43,15 +37,12 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
 
     const socket = getSocket();
     useSessionStore.getState().addMessage({ role: 'user', content: text });
-    useSessionStore.getState().setReviewFeedback(null);
     setInput('');
 
     if (phase === 'CLARIFICATION') {
-      socket.emit('clarification:submit', { sessionId, question: text });
+      socket.emit('clarification:submit', { sessionId, input: text });
     } else if (phase === 'APPROACH') {
       socket.emit('approach:submit', { sessionId, description: text });
-    } else if (phase === 'REVIEW') {
-      socket.emit('review:submit', { sessionId, response: text });
     }
   }
 
@@ -101,10 +92,10 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
           <p className="mb-2 text-[9px] tracking-widest text-muted">COVERAGE</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             {([
-              { key: 'INPUT',       label: 'Input',       min: 3 },
-              { key: 'OUTPUT',      label: 'Output',      min: 3 },
-              { key: 'EDGE_CASES',  label: 'Edge Cases',  min: 3 },
-              { key: 'CONSTRAINTS', label: 'Constraints', min: 2 },
+              { key: 'INPUT',       label: 'Input',       min: 1 },
+              { key: 'OUTPUT',      label: 'Output',      min: 1 },
+              { key: 'EDGE_CASES',  label: 'Edge Cases',  min: 2 },
+              { key: 'CONSTRAINTS', label: 'Constraints', min: 1 },
             ] as const).map(({ key, label, min }) => {
               const count = clarificationCoverage[key];
               const done = count >= min;
@@ -132,7 +123,7 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
           <div className="border-l-2 border-accent/30 py-0.5 pl-3">
             <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
             <p className="text-sm leading-relaxed text-white/50">
-              Take a moment to read the problem. When you're ready, ask a clarifying question.
+              Take a moment to read the problem. Ask a clarifying question, or state an inference you've drawn — either counts toward coverage.
             </p>
           </div>
         )}
@@ -164,23 +155,6 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
           </div>
         )}
 
-        {phase === 'REVIEW' && (
-          <div className="border-l-2 border-accent/30 py-0.5 pl-3">
-            <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
-            <p className="text-sm leading-relaxed text-white/80">
-              Your code has been submitted. Before we wrap up — please state the time and
-              space complexity of your solution, and walk me through 2–3 test cases you
-              would run to verify it.
-            </p>
-          </div>
-        )}
-
-        {reviewFeedback && phase === 'REVIEW' && (
-          <div className="border-l-2 border-warning/60 py-0.5 pl-3">
-            <p className="mb-1 text-[9px] tracking-widest text-muted">INTERVIEWER</p>
-            <p className="text-sm leading-relaxed text-white">{reviewFeedback}</p>
-          </div>
-        )}
 
         <AnimatePresence initial={false}>
           {messages.map((msg, i) =>
@@ -225,31 +199,47 @@ export function ChatPanel({ sessionId, problemTitle, problemStatement }: Props) 
         <div ref={bottomRef} />
       </div>
 
-      {/* Hint button — implementation phase only */}
-      {phase === 'IMPLEMENTATION' && hintLevel < hintCeiling && (
+      {/* Action buttons — implementation phase only */}
+      {phase === 'IMPLEMENTATION' && (
         <div className="shrink-0 border-t border-border px-4 py-2">
-          <button
-            onClick={requestHint}
-            disabled={isHintStreaming}
-            className="w-full border border-border py-2 text-xs tracking-widest text-muted transition hover:border-accent hover:text-white disabled:opacity-40"
-          >
-            REQUEST HINT (L{hintLevel + 1})
-          </button>
+          {mode !== 'STRICT' && hintLevel < hintCeiling && (
+            <div className="mb-2 flex items-center justify-between text-[10px] text-muted">
+              <span>HINT COST: {nextHintCost} XP</span>
+              <span className={xpBalance < nextHintCost ? 'text-danger' : 'text-muted'}>
+                BALANCE: {xpBalance} XP
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2">
+            {mode !== 'STRICT' && hintLevel < hintCeiling && (
+              <button
+                onClick={requestHint}
+                disabled={isHintStreaming || !canAffordHint}
+                title={!canAffordHint ? `Need ${nextHintCost} XP — earn more in the Dojo` : undefined}
+                className="flex-1 border border-border py-2 text-xs tracking-widest text-muted transition hover:border-accent hover:text-white disabled:opacity-40"
+              >
+                REQUEST HINT (L{nextHintLevel})
+              </button>
+            )}
+            <button
+              onClick={requestCheckin}
+              disabled={isHintStreaming}
+              className="flex-1 border border-border py-2 text-xs tracking-widest text-muted transition hover:border-border hover:text-white disabled:opacity-40"
+            >
+              CHECK IN
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Input — clarification, approach, and review */}
-      {(phase === 'CLARIFICATION' || phase === 'APPROACH' || phase === 'REVIEW') && (
+      {/* Input — clarification and approach */}
+      {(phase === 'CLARIFICATION' || phase === 'APPROACH') && (
         <div className="flex shrink-0 border-t border-border">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder={
-              phase === 'REVIEW'
-                ? 'State time/space complexity and walk through test cases…'
-                : 'Reply to interviewer…'
-            }
+            placeholder="Reply to interviewer…"
             className="flex-1 bg-transparent px-4 py-3 text-sm text-white placeholder:text-muted focus:outline-none"
           />
           <button

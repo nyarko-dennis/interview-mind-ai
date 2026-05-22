@@ -3,14 +3,15 @@ export type SessionPhase =
   | 'CLARIFICATION'
   | 'APPROACH'
   | 'IMPLEMENTATION'
-  | 'REVIEW'
   | 'DEBRIEF';
 
 export type HintLevel = 0 | 1 | 2 | 3 | 4;
 
 export type InterviewerMode = 'GUIDED' | 'STRICT';
 
-export type SupportedLanguage = 'python' | 'javascript' | 'typescript' | 'java' | 'cpp' | 'go';
+export type InterviewerPersona = 'STANDARD' | 'DISINTERESTED' | 'NITPICKER' | 'BACKSEAT_CODER' | 'COACH';
+
+export type SupportedLanguage = 'python' | 'javascript' | 'typescript' | 'java' | 'cpp' | 'go' | 'kotlin';
 
 export type ClarificationCategory = 'INPUT' | 'OUTPUT' | 'CONSTRAINTS' | 'EDGE_CASES';
 

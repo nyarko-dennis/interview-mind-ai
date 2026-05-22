@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { TodaysPractice } from './TodaysPractice';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -37,6 +38,20 @@ type ProblemRow = {
   pattern: string;
 };
 
+export type TodayAssignment = {
+  id: string;
+  assignedDate: string;
+  overdue: boolean;
+  completed: boolean;
+  sessionId: string | null;
+  problem: { id: string; title: string; difficulty: string; pattern: string };
+};
+
+export type ProgramWithAssignments = {
+  program: { id: string; type: string; config: { pattern?: string }; active: boolean };
+  assignments: TodayAssignment[];
+};
+
 // ---- pattern display names ------------------------------------------------
 
 const PATTERN_LABELS: Record<string, string> = {
@@ -65,8 +80,9 @@ const PATTERN_LABELS: Record<string, string> = {
 // ---- helpers --------------------------------------------------------------
 
 function computeStreak(sessions: SessionRow[]): number {
-  if (sessions.length === 0) return 0;
-  const dates = new Set(sessions.map((s) => s.startedAt.slice(0, 10)));
+  const scored = sessions.filter((s) => s.score !== null);
+  if (scored.length === 0) return 0;
+  const dates = new Set(scored.map((s) => s.startedAt.slice(0, 10)));
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const startOffset = dates.has(todayStr) ? 0 : 1;
@@ -147,7 +163,7 @@ function ScoreTrend({ sessions }: { sessions: SessionRow[] }) {
 
 function ActivityHeatmap({ sessions }: { sessions: SessionRow[] }) {
   const counts: Record<string, number> = {};
-  for (const s of sessions) {
+  for (const s of sessions.filter((s) => s.score !== null)) {
     const key = s.startedAt.slice(0, 10);
     counts[key] = (counts[key] || 0) + 1;
   }
@@ -242,7 +258,7 @@ function ActivityHeatmap({ sessions }: { sessions: SessionRow[] }) {
               key={cell.key || `pad-${i}`}
               title={
                 !cell.pad && cell.key
-                  ? `${cell.key}: ${cell.count} session${cell.count !== 1 ? 's' : ''}`
+                  ? `${cell.key}: ${cell.count} completed`
                   : undefined
               }
               className={
@@ -389,15 +405,17 @@ export default async function DashboardPage() {
   const user: UserData = await userRes.json();
   if (!user.onboardingComplete) redirect('/onboarding/calibration');
 
-  const [sessionsRes, progressRes, problemsRes] = await Promise.all([
+  const [sessionsRes, progressRes, problemsRes, todayRes] = await Promise.all([
     fetch(`${API}/sessions`, { headers, cache: 'no-store' }),
     fetch(`${API}/users/${user.id}/progress`, { headers, cache: 'no-store' }),
     fetch(`${API}/problems`, { cache: 'no-store' }),
+    fetch(`${API}/programs/today`, { headers, cache: 'no-store' }),
   ]);
 
   const sessions: SessionRow[] = sessionsRes.ok ? await sessionsRes.json() : [];
   const progress: ProgressRow[] = progressRes.ok ? await progressRes.json() : [];
   const allProblems: ProblemRow[] = problemsRes.ok ? await problemsRes.json() : [];
+  const todayPrograms: ProgramWithAssignments[] = todayRes.ok ? await todayRes.json() : [];
 
   // Compute stats
   const completed = sessions.filter((s) => s.score !== null);
@@ -435,7 +453,11 @@ export default async function DashboardPage() {
         </Link>
         <span className="mx-2 text-border/50">·</span>
         <Link href="/session/new" className="text-xs text-muted transition hover:text-white">
-          new session
+          practice
+        </Link>
+        <span className="mx-2 text-border/50">·</span>
+        <Link href="/programs" className="text-xs text-muted transition hover:text-white">
+          programs
         </Link>
         <span className="mx-2 text-border/50">·</span>
         <Link href="/dojo" className="text-xs text-muted transition hover:text-white">
@@ -464,7 +486,7 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-8">
           {(
             [
-              { label: 'SESSIONS', value: String(sessions.length) },
+              { label: 'SESSIONS', value: String(completed.length) },
               { label: 'STREAK', value: `${streak}d` },
               { label: 'AVG SCORE', value: avgScore > 0 ? toFifths(avgScore) : '—' },
               { label: 'SOLVED', value: `${solved}/${allProblems.length}` },
@@ -477,6 +499,15 @@ export default async function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Today's Practice */}
+      {todayPrograms.length > 0 && (
+        <TodaysPractice
+          programs={todayPrograms}
+          apiToken={authSession.apiToken!}
+          preferredMode={user.preferredMode}
+        />
+      )}
 
       {/* Main 3-col grid */}
       <div className="grid flex-1 grid-cols-[1fr_1fr_220px] divide-x divide-border border-b border-border">

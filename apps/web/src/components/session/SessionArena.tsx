@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatPanel } from '@/components/chat/ChatPanel';
-import { DebriefPanel } from '@/components/session/DebriefPanel';
 import { CodeEditor } from '@/components/editor/CodeEditor';
 import { PhaseIndicator } from '@/components/session/PhaseIndicator';
 import { useSessionStore } from '@/lib/store';
@@ -22,6 +21,9 @@ interface Props {
   initialMode: InterviewerMode;
   difficulty?: string;
   functionStub?: string;
+  functionStubs?: Record<string, string>;
+  sessionStartedAt: string;
+  initialXpBalance?: number;
 }
 
 function formatTime(seconds: number) {
@@ -39,6 +41,9 @@ export function SessionArena({
   initialMode,
   difficulty,
   functionStub,
+  functionStubs,
+  sessionStartedAt,
+  initialXpBalance = 0,
 }: Props) {
   const router = useRouter();
   const { data: authSession } = useSession();
@@ -54,19 +59,22 @@ export function SessionArena({
     setRunOutput,
     setHintLevel,
     setSubmissionError,
-    setReviewFeedback,
     setClarificationCoverage,
     setApproachStep,
     setDebriefData,
     setDebriefError,
+    setXpBalance,
     initSession,
   } = useSessionStore();
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(
+    () => Math.floor((Date.now() - new Date(sessionStartedAt).getTime()) / 1000),
+  );
   const [phaseElapsed, setPhaseElapsed] = useState(0);
   const [queue, setQueue] = useState<{ ids: string[]; goalMinutes: number } | null>(null);
 
   useEffect(() => {
-    initSession({ sessionId, phase: initialPhase, mode: initialMode, hintCeiling, functionStub });
+    initSession({ sessionId, phase: initialPhase, mode: initialMode, hintCeiling, functionStub, functionStubs });
+    setXpBalance(initialXpBalance);
   }, [sessionId]);
 
   useEffect(() => {
@@ -93,6 +101,7 @@ export function SessionArena({
       setPhase(phase);
       if (phase === 'APPROACH') setApproachStep('NAIVE');
       if (phase !== 'APPROACH') setApproachStep(null);
+      if (phase === 'DEBRIEF') router.push(`/session/${sessionId}/debrief`);
     });
 
     socket.on(WsServerEvents.CLARIFICATION_RESULT, (result: ClarificationResult) => {
@@ -116,9 +125,10 @@ export function SessionArena({
       appendStreamChunk(chunk);
     });
 
-    socket.on(WsServerEvents.AI_STREAM_END, (data: { level: number; isCeiling: boolean }) => {
+    socket.on(WsServerEvents.AI_STREAM_END, (data: { level: number; isCeiling: boolean; xpBalance?: number }) => {
       flushStream();
       setHintLevel(data.level as HintLevel);
+      if (data.xpBalance !== undefined) setXpBalance(data.xpBalance);
     });
 
     socket.on(WsServerEvents.CODE_RUNNING, () => {
@@ -139,16 +149,12 @@ export function SessionArena({
       }
     });
 
-    socket.on(WsServerEvents.REVIEW_RESULT, (result: { accepted: boolean; feedback: string }) => {
-      if (!result.accepted) {
-        setReviewFeedback(result.feedback);
-      }
-    });
-
     socket.on(WsServerEvents.SESSION_ERROR, ({ message, context }: { message: string; context?: string }) => {
       if (context === 'submission') {
         setIsRunning(false);
         setSubmissionError(message);
+      } else if (context === 'clarification' || context === 'approach') {
+        addMessage({ role: 'ai', content: `⚠ ${message}` });
       } else {
         setDebriefError(message);
       }
@@ -175,21 +181,20 @@ export function SessionArena({
   const isOverGoal = queue !== null && elapsed > queue.goalMinutes * 60;
 
   const editorLocked = phase === 'CLARIFICATION' || phase === 'IDLE';
-  // editorLocked drives the blur overlay; editorDisabled additionally covers REVIEW/DEBRIEF
-  const editorDisabled = editorLocked || phase === 'REVIEW' || phase === 'DEBRIEF';
+  const editorDisabled = editorLocked || phase === 'DEBRIEF';
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas">
       {/* Header */}
-      <header className="relative flex h-12 shrink-0 items-center border-b border-border px-4">
+      <header className="grid h-12 shrink-0 grid-cols-3 items-center border-b border-border px-4">
         {/* Left: logo + problem info */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold tracking-widest">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 text-xs font-bold tracking-widest">
             <span className="text-white">INTERVIEWMIND</span>
             <span className="text-accent">.AI</span>
           </span>
-          <span className="text-border">|</span>
-          <span className={`text-xs ${isOverGoal ? 'text-warning' : 'text-muted'}`}>
+          <span className="shrink-0 text-border">|</span>
+          <span className={`truncate text-xs ${isOverGoal ? 'text-warning' : 'text-muted'}`}>
             {formatTime(elapsed)}
             {queue ? ` / ${String(queue.goalMinutes).padStart(2, '0')}:00` : ''}
             {' · '}
@@ -197,43 +202,41 @@ export function SessionArena({
             {difficulty ? ` · ${difficulty}` : ''}
           </span>
           {phase !== 'IDLE' && phase !== 'DEBRIEF' && (
-            <span className="text-[10px] text-muted/40">
+            <span className="shrink-0 text-[10px] text-muted/40">
               phase {formatTime(phaseElapsed)}
             </span>
           )}
           {isMultiProblem && (
-            <span className="text-[10px] tracking-widest text-muted/50">
+            <span className="shrink-0 text-[10px] tracking-widest text-muted/50">
               {queueIndex + 1} / {queue!.ids.length}
             </span>
           )}
         </div>
 
-        {/* Center: phase stepper (absolutely centered so it doesn't shift with left/right content) */}
-        <div className="absolute left-1/2 -translate-x-1/2">
+        {/* Center: phase stepper */}
+        <div className="flex justify-center">
           <PhaseIndicator phase={phase} />
         </div>
 
         {/* Right: End Session */}
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="ml-auto text-xs text-muted/60 transition hover:text-white"
-        >
-          End Session
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="text-xs text-muted/60 transition hover:text-white"
+          >
+            End Session
+          </button>
+        </div>
       </header>
 
       {/* Split: chat left, editor right */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex w-[420px] shrink-0 flex-col border-r border-border">
-          {phase === 'DEBRIEF' ? (
-            <DebriefPanel problemTitle={problemTitle} elapsed={elapsed} sessionId={sessionId} />
-          ) : (
-            <ChatPanel
-              sessionId={sessionId}
-              problemTitle={problemTitle}
-              problemStatement={problemStatement}
-            />
-          )}
+          <ChatPanel
+            sessionId={sessionId}
+            problemTitle={problemTitle}
+            problemStatement={problemStatement}
+          />
         </div>
 
         <div className="relative flex flex-1 flex-col">
@@ -266,7 +269,7 @@ export function SessionArena({
                   </p>
                   <p className="max-w-[200px] text-xs text-muted">
                     {phase === 'CLARIFICATION'
-                      ? 'Ask at least one clarifying question to proceed.'
+                      ? 'Cover all four categories (Input, Output, Constraints, Edge Cases) to proceed.'
                       : 'Describe your approach to proceed.'}
                   </p>
                 </div>

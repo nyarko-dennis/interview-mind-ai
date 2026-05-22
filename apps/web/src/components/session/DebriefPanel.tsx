@@ -23,6 +23,43 @@ function formatTime(seconds: number) {
   return `${m}:${s}`;
 }
 
+const DEBRIEF_SECTIONS: { key: string; label: string }[] = [
+  { key: 'complexity',    label: '// complexity' },
+  { key: 'edgeCases',     label: '// edge cases' },
+  { key: 'communication', label: '// communication' },
+  { key: 'improvement',   label: '// improvement' },
+];
+
+function DebriefSections({ raw }: { raw: string }) {
+  let parsed: Record<string, string> | null = null;
+  try {
+    const json = JSON.parse(raw);
+    if (typeof json === 'object' && json !== null) parsed = json as Record<string, string>;
+  } catch {}
+
+  if (!parsed) {
+    return (
+      <>
+        <p className="mb-2 text-[10px] tracking-widest text-muted/60">// debrief</p>
+        <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">{raw}</p>
+      </>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {DEBRIEF_SECTIONS.map(({ key, label }) =>
+        parsed![key] ? (
+          <div key={key}>
+            <p className="mb-1 text-[10px] tracking-widest text-muted/60">{label}</p>
+            <p className="text-xs leading-relaxed text-muted">{parsed![key]}</p>
+          </div>
+        ) : null,
+      )}
+    </div>
+  );
+}
+
 interface Props {
   problemTitle: string;
   elapsed: number;
@@ -93,10 +130,7 @@ export function DebriefPanel({ problemTitle, elapsed, sessionId }: Props) {
               })}
             </div>
 
-            <p className="mb-2 text-[10px] tracking-widest text-muted/60">// debrief</p>
-            <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">
-              {debriefData.debriefReport}
-            </p>
+            <DebriefSections raw={debriefData.debriefReport} />
           </motion.div>
         ) : (
           <div>

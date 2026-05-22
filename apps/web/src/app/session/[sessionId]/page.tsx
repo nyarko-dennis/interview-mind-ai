@@ -9,6 +9,7 @@ interface SessionData {
   id: string;
   phase: SessionPhase;
   mode: string;
+  startedAt: string;
   problem: {
     id: string;
     title: string;
@@ -17,6 +18,7 @@ interface SessionData {
     pattern: string;
     difficulty: string;
     functionStub: string | null;
+    functionStubs: Record<string, string> | null;
   };
 }
 
@@ -27,15 +29,17 @@ interface Props {
 export default async function SessionPage({ params }: Props) {
   const { sessionId } = await params;
   const session = await auth();
+  const headers = { Authorization: `Bearer ${session?.apiToken ?? ''}` };
 
-  const res = await fetch(`${API}/sessions/${sessionId}`, {
-    headers: { Authorization: `Bearer ${session?.apiToken ?? ''}` },
-    cache: 'no-store',
-  });
+  const [res, xpRes] = await Promise.all([
+    fetch(`${API}/sessions/${sessionId}`, { headers, cache: 'no-store' }),
+    fetch(`${API}/dojo/weekly-summary`, { headers, cache: 'no-store' }),
+  ]);
 
   if (!res.ok) notFound();
 
   const data: SessionData = await res.json();
+  const xpData = xpRes.ok ? await xpRes.json() : { totalXp: 0 };
 
   return (
     <SessionArena
@@ -47,6 +51,9 @@ export default async function SessionPage({ params }: Props) {
       initialMode={data.mode as 'GUIDED' | 'STRICT'}
       difficulty={data.problem.difficulty}
       functionStub={data.problem.functionStub ?? undefined}
+      functionStubs={data.problem.functionStubs ?? {}}
+      sessionStartedAt={data.startedAt}
+      initialXpBalance={xpData.totalXp ?? 0}
     />
   );
 }

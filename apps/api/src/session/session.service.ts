@@ -1,10 +1,10 @@
 import { Inject, Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db';
 import { DB_TOKEN } from '../db/db.module';
-import { problems as problemsTable, scores, sessions, users } from '../db/schema';
+import { problems as problemsTable, scores, sessions, users, userGamification } from '../db/schema';
 import { AiService } from '../ai/ai.service';
-import { Judge0Service } from '../judge0/judge0.service';
+import { PistonService } from '../piston/piston.service';
 import { ProblemsService } from '../problems/problems.service';
 import { ScoringService } from '../scoring/scoring.service';
 import type {
@@ -21,7 +21,7 @@ export class SessionService {
   constructor(
     @Inject(DB_TOKEN) private readonly db: Db,
     private readonly ai: AiService,
-    private readonly judge0: Judge0Service,
+    private readonly piston: PistonService,
     private readonly problems: ProblemsService,
     private readonly scoring: ScoringService,
   ) {}
@@ -30,6 +30,7 @@ export class SessionService {
     userId: string;
     problemId: string;
     mode: InterviewerMode;
+    persona?: string;
   }) {
     const [problem, user] = await Promise.all([
       this.problems.findById(params.problemId),
@@ -60,16 +61,19 @@ export class SessionService {
       where: eq(sessions.id, sessionId),
     });
     if (!session) throw new BadRequestException(`Session ${sessionId} not found`);
-    const problem = await this.problems.findById(session.problemId);
-    return { ...session, problem };
+    const [problem, score] = await Promise.all([
+      this.problems.findById(session.problemId),
+      this.db.query.scores.findFirst({ where: eq(scores.sessionId, sessionId) }),
+    ]);
+    return { ...session, problem, score: score ?? null };
   }
 
   // Per-category minimums required before advancing to APPROACH.
   private static readonly CLARIFICATION_MINIMUMS: ClarificationCoverage = {
-    INPUT: 3,
-    OUTPUT: 3,
-    CONSTRAINTS: 2,
-    EDGE_CASES: 3,
+    INPUT: 1,
+    OUTPUT: 1,
+    CONSTRAINTS: 1,
+    EDGE_CASES: 2,
   };
 
   // Category weights for communication score (must sum to 100).
@@ -81,9 +85,10 @@ export class SessionService {
   };
 
   // Progressive guidance thresholds (total questions asked).
-  private static readonly CLARIFICATION_HINT_THRESHOLD = 3;
   private static readonly CLARIFICATION_WARN_THRESHOLD = 5;
   private static readonly CLARIFICATION_AUTO_ADVANCE   = 10;
+
+  static readonly HINT_XP_COSTS: Record<number, number> = { 1: 5, 2: 15, 3: 40, 4: 80 };
 
   private static readonly EMPTY_COVERAGE: ClarificationCoverage = {
     INPUT: 0,
@@ -127,7 +132,7 @@ export class SessionService {
     );
   }
 
-  async evaluateClarification(sessionId: string, question: string) {
+  async evaluateClarification(sessionId: string, input: string) {
     const session = await this.getById(sessionId);
     this.assertPhase(session.phase as SessionPhase, 'CLARIFICATION');
 
@@ -153,7 +158,7 @@ export class SessionService {
     }
 
     const problem = await this.problems.findById(session.problemId);
-    const result = await this.ai.evaluateClarification(problem.statement, question);
+    const result = await this.ai.evaluateClarification(problem.statement, input, session.persona ?? 'STANDARD');
 
     // Only credit coverage when the AI judges the question substantive.
     const newCoverage: ClarificationCoverage = { ...coverage };
@@ -185,10 +190,7 @@ export class SessionService {
 
     if (newAttempts >= SessionService.CLARIFICATION_WARN_THRESHOLD) {
       feedback +=
-        ` (Attempt ${newAttempts}/${SessionService.CLARIFICATION_AUTO_ADVANCE}: your communication score is affected.` +
-        ` Still needed: ${missing}.)`;
-    } else if (newAttempts >= SessionService.CLARIFICATION_HINT_THRESHOLD) {
-      feedback += ` (Tip: you still need to cover ${missing}.)`;
+        ` (Attempt ${newAttempts}/${SessionService.CLARIFICATION_AUTO_ADVANCE}: your communication score is affected.)`;
     }
 
     return { passed: false, feedback, category: result.category, coverage: newCoverage };
@@ -201,8 +203,19 @@ export class SessionService {
     const step: ApproachStep = (session.approachStep as ApproachStep) ?? 'NAIVE';
     const problem = await this.problems.findById(session.problemId);
 
+    // Accumulate all submissions for this step so the AI sees the full picture,
+    // not just the latest message.
+    const history = (session.approachHistory as Record<ApproachStep, string[]>) ?? {
+      NAIVE: [],
+      IMPROVE: [],
+      OPTIMAL: [],
+    };
+    history[step] = [...history[step], description];
+    await this.db.update(sessions).set({ approachHistory: history }).where(eq(sessions.id, sessionId));
+    const accumulated = history[step].join('\n---\n');
+
     if (step === 'NAIVE') {
-      const result = await this.ai.evaluateNaiveApproach(problem.statement, description);
+      const result = await this.ai.evaluateNaiveApproach(problem.statement, accumulated, session.persona ?? 'STANDARD');
       if (result.accepted) {
         await this.db.update(sessions).set({ approachStep: 'IMPROVE' }).where(eq(sessions.id, sessionId));
       }
@@ -210,7 +223,7 @@ export class SessionService {
     }
 
     if (step === 'IMPROVE') {
-      const result = await this.ai.evaluateImprovedApproach(problem.statement, description);
+      const result = await this.ai.evaluateImprovedApproach(problem.statement, accumulated, session.persona ?? 'STANDARD');
       if (result.accepted) {
         await this.db.update(sessions).set({ approachStep: 'OPTIMAL' }).where(eq(sessions.id, sessionId));
       }
@@ -221,7 +234,8 @@ export class SessionService {
     const result = await this.ai.evaluateOptimalApproach(
       problem.statement,
       problem.optimalTimeComplexity ?? null,
-      description,
+      accumulated,
+      session.persona ?? 'STANDARD',
     );
     if (result.accepted) {
       await this.transitionPhase(sessionId, 'IMPLEMENTATION');
@@ -238,6 +252,21 @@ export class SessionService {
     const currentMax: HintLevel = hintsUsed.length > 0 ? Math.max(...hintsUsed) as HintLevel : 0;
     const nextLevel = Math.min(currentMax + 1, problem.hintCeiling) as HintLevel;
 
+    // XP economy: check and deduct before delivering the hint.
+    const xpCost = SessionService.HINT_XP_COSTS[nextLevel] ?? 5;
+    const gam = await this.db.query.userGamification.findFirst({
+      where: eq(userGamification.userId, session.userId),
+    });
+    const currentXp = gam?.totalXp ?? 0;
+    if (currentXp < xpCost) {
+      throw new BadRequestException({ code: 'INSUFFICIENT_XP', xpNeeded: xpCost, xpBalance: currentXp });
+    }
+    await this.db
+      .update(userGamification)
+      .set({ totalXp: sql`total_xp - ${xpCost}` })
+      .where(eq(userGamification.userId, session.userId));
+    const xpBalance = currentXp - xpCost;
+
     const updatedHints = [...hintsUsed, nextLevel];
     await this.db
       .update(sessions)
@@ -250,9 +279,10 @@ export class SessionService {
       level: nextLevel,
       isCeiling: nextLevel >= problem.hintCeiling,
       hintContent: hintRow?.content ?? null,
-      // Fallback fields used only when no DB hint exists
       problemStatement: problem.statement,
       context: `Hints used so far: ${hintsUsed.join(', ')}`,
+      xpCost,
+      xpBalance,
     };
   }
 
@@ -260,41 +290,12 @@ export class SessionService {
     const session = await this.getById(sessionId);
     this.assertPhase(session.phase as SessionPhase, 'IMPLEMENTATION');
 
-    await this.transitionPhase(sessionId, 'REVIEW');
+    const runners = (session.problem.testRunners as Record<string, string> | null) ?? {};
+    const runner = runners[language] ?? (language === 'python' ? session.problem.testRunner : null);
+    const codeToRun = runner ? `${code}\n\n${runner.trim()}` : code;
 
-    // Append the problem's test runner (Python only for now) so Judge0 evaluates
-    // against real test cases rather than just checking for a clean exit.
-    const codeToRun =
-      language === 'python' && session.problem.testRunner
-        ? `${code}\n\n${session.problem.testRunner}`
-        : code;
-
-    try {
-      const result = await this.judge0.submitAndWait({ code: codeToRun, language });
-      // Stay in REVIEW — the gateway advances to DEBRIEF after review:submit is accepted.
-      return result;
-    } catch (err) {
-      // Revert so the user can retry without creating a new session.
-      await this.transitionPhase(sessionId, 'IMPLEMENTATION');
-      throw err;
-    }
-  }
-
-  async evaluateReview(sessionId: string, response: string, code: string) {
-    const session = await this.getById(sessionId);
-    this.assertPhase(session.phase as SessionPhase, 'REVIEW');
-
-    const problem = await this.problems.findById(session.problemId);
-    const result = await this.ai.evaluateReview({
-      problemStatement: problem.statement,
-      code,
-      candidateReview: response,
-    });
-
-    if (result.accepted) {
-      await this.transitionPhase(sessionId, 'DEBRIEF');
-    }
-
+    const result = await this.piston.execute({ code: codeToRun, language });
+    await this.transitionPhase(sessionId, 'DEBRIEF');
     return result;
   }
 
@@ -346,8 +347,10 @@ export class SessionService {
       testsPassed: params.testsPassed,
       testsTotal: params.testsTotal,
       hintsUsed,
-      clarificationNotes: 'N/A',
-      approachNotes: 'N/A',
+      clarificationCoverage: (session.clarificationCoverage as Record<string, number>) ?? {},
+      clarificationAttempts: session.clarificationAttempts,
+      approachHistory: (session.approachHistory as Record<string, string[]>) ?? {},
+      persona: session.persona ?? 'STANDARD',
     });
 
     const score = await this.scoring.saveScore({
@@ -362,7 +365,7 @@ export class SessionService {
     await this.scoring.updatePatternProgress({
       userId: session.userId,
       pattern: session.problem.pattern,
-      solved: params.testsPassed === params.testsTotal,
+      solved: params.testsTotal > 0 && params.testsPassed === params.testsTotal,
       scoreTotal: score.total,
       maxHintLevel: session.maxHintLevel,
     });
@@ -379,7 +382,10 @@ export class SessionService {
 
   private async transitionPhase(sessionId: string, phase: SessionPhase) {
     const updates: Partial<typeof sessions.$inferInsert> = { phase };
-    if (phase === 'APPROACH') updates.approachStep = 'NAIVE';
+    if (phase === 'APPROACH') {
+      updates.approachStep = 'NAIVE';
+      updates.approachHistory = { NAIVE: [], IMPROVE: [], OPTIMAL: [] };
+    }
     if (phase === 'IMPLEMENTATION') updates.approachStep = null;
     if (phase === 'DEBRIEF') updates.completedAt = new Date();
 

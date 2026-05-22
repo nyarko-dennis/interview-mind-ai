@@ -9,10 +9,11 @@ export class ProblemsService {
   constructor(@Inject(DB_TOKEN) private readonly db: Db) {}
 
   async findAll(filters?: { pattern?: string; difficulty?: string }) {
+    const conditions = [];
+    if (filters?.pattern) conditions.push(eq(problems.pattern, filters.pattern));
+    if (filters?.difficulty) conditions.push(eq(problems.difficulty, filters.difficulty));
     const rows = await this.db.query.problems.findMany({
-      where: filters?.pattern
-        ? eq(problems.pattern, filters.pattern)
-        : undefined,
+      where: conditions.length > 0 ? and(...conditions) : undefined,
     });
     return rows;
   }

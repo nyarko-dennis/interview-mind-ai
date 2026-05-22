@@ -35,6 +35,8 @@ export const problems = pgTable('problems', {
   optimalTimeComplexity: text('optimal_time_complexity'),
   functionStub: text('function_stub'),
   testRunner: text('test_runner'),
+  functionStubs: jsonb('function_stubs').notNull().default('{}'),
+  testRunners: jsonb('test_runners').notNull().default('{}'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -57,12 +59,15 @@ export const sessions = pgTable('sessions', {
     .references(() => problems.id),
   phase: text('phase').notNull().default('IDLE'),
   mode: text('mode').notNull(),
+  persona: text('persona').notNull().default('STANDARD'),
   freePlay: boolean('free_play').notNull().default(false),
   hintsUsed: jsonb('hints_used').notNull().default('[]'),
   maxHintLevel: integer('max_hint_level').notNull().default(0),
   clarificationAttempts: integer('clarification_attempts').notNull().default(0),
   clarificationCoverage: jsonb('clarification_coverage').notNull().default('{"INPUT":0,"OUTPUT":0,"CONSTRAINTS":0,"EDGE_CASES":0}'),
   approachStep: text('approach_step'),
+  approachHistory: jsonb('approach_history').notNull().default('{"NAIVE":[],"IMPROVE":[],"OPTIMAL":[]}'),
+
   startedAt: timestamp('started_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
 });
@@ -168,6 +173,35 @@ export const dojodrills = pgTable('dojo_drills', {
   prompt: text('prompt').notNull(),
   correctAnswer: text('correct_answer'),
   difficulty: text('difficulty').notNull().default('EASY'),
+});
+
+// ── Programs tables ──────────────────────────────────────────────────────────
+
+export const userPrograms = pgTable('user_programs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'DAILY_SPRINT' | 'DEEP_DIVE' | 'INTERVIEW_SIM'
+  config: jsonb('config').notNull().default('{}'), // { pattern?: string }
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const programAssignments = pgTable('program_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  programId: uuid('program_id')
+    .notNull()
+    .references(() => userPrograms.id, { onDelete: 'cascade' }),
+  problemId: uuid('problem_id')
+    .notNull()
+    .references(() => problems.id),
+  assignedDate: text('assigned_date').notNull(), // 'YYYY-MM-DD'
+  sessionId: uuid('session_id').references(() => sessions.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 export const dojoAttempts = pgTable('dojo_attempts', {

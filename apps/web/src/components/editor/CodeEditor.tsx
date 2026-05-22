@@ -8,7 +8,7 @@ import type { SupportedLanguage } from '@interview-mind/shared';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
-const LANGUAGES: SupportedLanguage[] = ['python', 'javascript', 'typescript', 'java', 'cpp', 'go'];
+const LANGUAGES: SupportedLanguage[] = ['python', 'javascript', 'typescript', 'java', 'cpp', 'go', 'kotlin'];
 
 const MONACO_LANG: Record<SupportedLanguage, string> = {
   python: 'python',
@@ -17,6 +17,7 @@ const MONACO_LANG: Record<SupportedLanguage, string> = {
   java: 'java',
   cpp: 'cpp',
   go: 'go',
+  kotlin: 'kotlin',
 };
 
 const LANG_EXT: Record<SupportedLanguage, string> = {
@@ -26,6 +27,7 @@ const LANG_EXT: Record<SupportedLanguage, string> = {
   java: 'java',
   cpp: 'cpp',
   go: 'go',
+  kotlin: 'kt',
 };
 
 // Guided surfaces hints at lower idle threshold than Strict.
@@ -37,6 +39,20 @@ const IDLE_THRESHOLD_MS: Record<string, number> = {
 interface Props {
   sessionId: string;
   disabled?: boolean;
+}
+
+// Extract the first error line number from Judge0 stderr across common languages.
+function parseErrorLine(stderr: string): number | null {
+  const patterns = [
+    /\bline (\d+)/i,       // Python, generic
+    /:(\d+):\d+[:\s]/,     // C++, Go, TypeScript, Java
+    /:(\d+):/,             // fallback col-less
+  ];
+  for (const p of patterns) {
+    const m = stderr.match(p);
+    if (m) return parseInt(m[1], 10);
+  }
+  return null;
 }
 
 export function CodeEditor({ sessionId, disabled }: Props) {
@@ -58,8 +74,10 @@ export function CodeEditor({ sessionId, disabled }: Props) {
   } = useSessionStore();
 
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  // Tracks the last time the user typed or a hint was delivered.
   const lastActivityRef = useRef(Date.now());
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]);
 
   const isApproach = phase === 'APPROACH';
   const isDebrief = phase === 'DEBRIEF';
@@ -100,8 +118,32 @@ export function CodeEditor({ sessionId, disabled }: Props) {
     getSocket().emit('approach:submit', { sessionId, description: code });
   }
 
+  // Apply / clear error decorations when stderr changes.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    // Clear previous decorations first.
+    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, []);
+    if (runOutput?.stderr) {
+      const line = parseErrorLine(runOutput.stderr);
+      if (line) {
+        decorationsRef.current = editor.deltaDecorations([], [
+          {
+            range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
+            options: {
+              isWholeLine: true,
+              className: 'im-error-line',
+              linesDecorationsClassName: 'im-error-gutter',
+            },
+          },
+        ]);
+      }
+    }
+  }, [runOutput?.stderr]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleEditorMount(editor: any) {
+    editorRef.current = editor;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     editor.onDidChangeCursorPosition((e: any) => {
       setCursor({ line: e.position.lineNumber, col: e.position.column });
@@ -177,10 +219,10 @@ export function CodeEditor({ sessionId, disabled }: Props) {
         </div>
       )}
 
-      {/* Judge0 unavailable — retry prompt */}
+      {/* Execution unavailable — retry prompt */}
       {!isApproach && submissionError && !isRunning && (
         <div className="shrink-0 border-t border-border bg-canvas px-4 py-2 text-xs">
-          <p className="text-danger">$ judge0 unavailable</p>
+          <p className="text-danger">$ execution unavailable</p>
           <p className="mt-0.5 text-muted/80">&gt; {submissionError}</p>
           <button
             onClick={() => {
@@ -196,21 +238,28 @@ export function CodeEditor({ sessionId, disabled }: Props) {
 
       {/* Test output panel */}
       {!isApproach && runOutput && !isRunning && (
-        <div className="max-h-28 shrink-0 overflow-y-auto border-t border-border bg-canvas px-4 py-2 text-xs">
-          <p className="text-muted">$ judge0 submission</p>
-          <p className={runOutput.status === 'Accepted' ? 'text-success' : 'text-danger'}>
-            &gt; {runOutput.status.toLowerCase()}
-          </p>
-          {runOutput.runtimeMs !== undefined && (
-            <p className="text-muted">&gt; runtime: {runOutput.runtimeMs}ms</p>
-          )}
+        <div className="max-h-40 shrink-0 overflow-y-auto border-t border-border bg-canvas px-4 py-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-muted">$ judge0</span>
+            <span className={runOutput.status === 'Accepted' ? 'text-success' : 'text-danger'}>
+              {runOutput.status.toLowerCase()}
+            </span>
+          </div>
           {testsPassed !== null && (
-            <p className={testsPassed === testsTotal ? 'text-success' : 'text-danger'}>
-              &gt; tests: {testsPassed}/{testsTotal} passed
+            <p className={`mt-0.5 ${testsPassed === testsTotal ? 'text-success' : 'text-danger'}`}>
+              &gt; {testsPassed}/{testsTotal} tests passed
             </p>
           )}
+          {runOutput.runtimeMs !== undefined && (
+            <p className="text-muted/60">&gt; {runOutput.runtimeMs}ms</p>
+          )}
           {runOutput.stderr && (
-            <p className="mt-1 text-danger/70">&gt; {runOutput.stderr}</p>
+            <div className="mt-1.5 border-l-2 border-danger/50 pl-2">
+              <p className="mb-0.5 text-[10px] tracking-widest text-danger/70">
+                {runOutput.status.toLowerCase().includes('compile') ? '// compile error' : '// stderr'}
+              </p>
+              <pre className="whitespace-pre-wrap break-all text-danger/80">{runOutput.stderr}</pre>
+            </div>
           )}
         </div>
       )}

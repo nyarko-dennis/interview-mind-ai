@@ -29,7 +29,6 @@ export const WsServerEvents = {
   HINT_DELIVER: 'hint:deliver',
   CODE_RUNNING: 'code:running',
   CODE_RESULT: 'code:result',
-  REVIEW_RESULT: 'review:result',
   PHASE_CHANGE: 'phase:change',
   AI_STREAM_CHUNK: 'ai:stream:chunk',
   AI_STREAM_END: 'ai:stream:end',
@@ -66,7 +65,3 @@ export type CodeResult = {
   failedCase?: { input: string; expected: string; actual: string };
 };
 
-export type ReviewResult = {
-  accepted: boolean;
-  feedback: string;
-};

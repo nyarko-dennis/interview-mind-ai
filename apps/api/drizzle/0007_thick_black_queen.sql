@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "persona" text DEFAULT 'STANDARD' NOT NULL;
